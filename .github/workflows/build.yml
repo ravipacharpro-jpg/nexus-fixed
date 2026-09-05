@@ -14,7 +14,7 @@ jobs:
         with:
           bun-version: 1.4.0
       - run: bun install
-      - run: bun --cwd packages/nexus run build --single --target=linux-arm64 2>&1 | tail -20
+      - run: bun --cwd packages/nexus run script/build.ts --single --target=linux-arm64 2>&1 | tail -50
       - run: ls -lh packages/nexus/dist/ 2>&1 | head -20
       - uses: actions/upload-artifact@v4
         with:
