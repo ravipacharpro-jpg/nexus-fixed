@@ -418,11 +418,16 @@ download_and_install() {
 
     install_termux_runtime
     if [ "$is_termux" = "true" ]; then
-        local wrapper_path="$INSTALL_DIR/.nexus-wrapper-$$"
-        write_termux_wrapper "$wrapper_path"
-        mv "$extracted_bin" "$INSTALL_DIR/nexus.bin"
-        mv "$wrapper_path" "$INSTALL_DIR/nexus"
-        chmod 755 "$INSTALL_DIR/nexus.bin" "$INSTALL_DIR/nexus"
+        if head -c 2 "$extracted_bin" 2>/dev/null | grep -q "#!"; then
+            mv "$extracted_bin" "$INSTALL_DIR/nexus"
+            chmod 755 "$INSTALL_DIR/nexus"
+        else
+            local wrapper_path="$INSTALL_DIR/.nexus-wrapper-$$"
+            write_termux_wrapper "$wrapper_path"
+            mv "$extracted_bin" "$INSTALL_DIR/nexus.bin"
+            mv "$wrapper_path" "$INSTALL_DIR/nexus"
+            chmod 755 "$INSTALL_DIR/nexus.bin" "$INSTALL_DIR/nexus"
+        fi
     else
         mv "$extracted_bin" "$INSTALL_DIR/nexus"
         chmod 755 "$INSTALL_DIR/nexus"
@@ -434,11 +439,16 @@ install_from_binary() {
     print_message info "\n${MUTED}Installing ${NC}NEXUS ${MUTED}from: ${NC}$binary_path"
     if [ "$is_termux" = "true" ]; then
         install_termux_runtime
-        local wrapper_path="$INSTALL_DIR/.nexus-wrapper-$$"
-        write_termux_wrapper "$wrapper_path"
-        mv "$binary_path" "$INSTALL_DIR/nexus.bin"
-        mv "$wrapper_path" "$INSTALL_DIR/nexus"
-        chmod 755 "$INSTALL_DIR/nexus.bin" "$INSTALL_DIR/nexus"
+        if head -c 2 "$binary_path" 2>/dev/null | grep -q "#!"; then
+            cp "$binary_path" "${INSTALL_DIR}/nexus"
+            chmod 755 "${INSTALL_DIR}/nexus"
+        else
+            local wrapper_path="$INSTALL_DIR/.nexus-wrapper-$$"
+            write_termux_wrapper "$wrapper_path"
+            mv "$binary_path" "$INSTALL_DIR/nexus.bin"
+            mv "$wrapper_path" "$INSTALL_DIR/nexus"
+            chmod 755 "$INSTALL_DIR/nexus.bin" "$INSTALL_DIR/nexus"
+        fi
     else
         cp "$binary_path" "${INSTALL_DIR}/nexus"
         chmod 755 "${INSTALL_DIR}/nexus"
