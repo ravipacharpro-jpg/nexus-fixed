@@ -2,7 +2,7 @@
 set -euo pipefail
 
 APP=nexus
-REPO=itzgeniusboy/nexus
+REPO=ravipacharpro-jpg/nexus-fixed
 INSTALL_DIR="${NEXUS_INSTALL_DIR:-$HOME/.nexus/bin}"
 
 MUTED='\033[0;2m'
