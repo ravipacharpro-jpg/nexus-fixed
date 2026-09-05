@@ -1,0 +1,24 @@
+name: ci
+
+on:
+  push:
+    branches: [dev]
+  pull_request:
+    branches: [dev]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.0
+      - run: bun install
+      - run: bash -n scripts/install-browser-common.sh
+      - run: bash -n scripts/install-browser-minimal.sh
+      - run: bash -n scripts/install-browser-balanced.sh
+      - run: bash -n scripts/install-browser-full.sh
+      - run: bun --cwd packages/nexus test test/cli/doctor.test.ts
+      - run: bun --conditions=browser --bun -e 'const t=new Bun.Transpiler({loader:"tsx"}); const s=await Bun.file("packages/tui/src/component/dialog-browser-adapter.tsx").text(); t.transformSync(s); console.log("dialog-browser-adapter OK")'
+      - run: bun --conditions=browser --bun -e 'const t=new Bun.Transpiler({loader:"tsx"}); const s=await Bun.file("packages/tui/src/app.tsx").text(); t.transformSync(s); console.log("app.tsx OK")'
