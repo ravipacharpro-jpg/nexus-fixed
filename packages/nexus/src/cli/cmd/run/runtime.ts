@@ -637,6 +637,17 @@ async function runInteractiveRuntime(input: RunRuntimeInput, deps: RunRuntimeDep
             }
           }
         : undefined,
+      onSteer: async (prompt) => {
+        const next = await ensureStream()
+        await next.handle.steerPromptTurn({
+          agent: state.agent,
+          model: state.model,
+          variant: state.activeVariant,
+          prompt,
+          files: input.files,
+          includeFiles,
+        })
+      },
       run: async (prompt, signal) => {
         if (state.demo && (await state.demo.prompt(prompt, signal))) {
           return

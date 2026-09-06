@@ -101,6 +101,7 @@ export type SessionTurnInput = {
 
 export type SessionTransport = {
   runPromptTurn(input: SessionTurnInput): Promise<void>
+  steerPromptTurn(input: SessionTurnInput): Promise<void>
   selectSubagent(sessionID: string | undefined): void
   replayOnResize(input: SessionResizeReplayInput): Promise<boolean>
   close(): Promise<void>
@@ -125,10 +126,29 @@ type State = {
 
 type TransportService = {
   readonly runPromptTurn: (input: SessionTurnInput) => Effect.Effect<void, unknown>
+  readonly steerPromptTurn: (input: SessionTurnInput) => Effect.Effect<void, unknown>
   readonly selectSubagent: (sessionID: string | undefined) => Effect.Effect<void>
   readonly replayOnResize: (input: SessionResizeReplayInput) => Effect.Effect<boolean>
   readonly close: () => Effect.Effect<void>
 }
+
+/**
+ * Shared prompt-admission payload. runPromptTurn arms a turn waiter around
+ * it; steerPromptTurn sends the identical payload without any waiter so a
+ * correction joins the running session instead of queueing behind it.
+ */
+const buildPromptRequest = (sessionID: string, next: SessionTurnInput) => ({
+  sessionID,
+  messageID: next.prompt.messageID,
+  agent: next.agent,
+  model: next.model,
+  variant: next.variant,
+  parts: [
+    ...(next.includeFiles ? next.files : []),
+    { type: "text" as const, text: next.prompt.text },
+    ...next.prompt.parts,
+  ],
+})
 
 class Service extends Context.Service<Service, TransportService>()("@nexus/RunStreamTransport") {}
 
@@ -1217,18 +1237,7 @@ function createLayer(input: StreamInput) {
           abort.signal.addEventListener("abort", stop, { once: true })
           yield* poll(item, turn.signal).pipe(Effect.forkIn(scope, { startImmediately: true }), Effect.asVoid)
 
-          const req = {
-            sessionID: input.sessionID,
-            messageID: next.prompt.messageID,
-            agent: next.agent,
-            model: next.model,
-            variant: next.variant,
-            parts: [
-              ...(next.includeFiles ? next.files : []),
-              { type: "text" as const, text: next.prompt.text },
-              ...next.prompt.parts,
-            ],
-          }
+          const req = buildPromptRequest(input.sessionID, next)
           const command = next.prompt.command
           const send =
             next.prompt.mode === "shell"
@@ -1409,6 +1418,42 @@ function createLayer(input: StreamInput) {
           return
         })
 
+        /**
+         * Admit one prompt into the running session without arming a turn
+         * waiter. The active turn keeps watching for idle; the admitted
+         * correction is picked up by the server loop at its next safe
+         * boundary. Never call this while no turn is active — use
+         * runPromptTurn for fresh turns so waiter/tick bookkeeping stays
+         * exactly single-turn.
+         */
+        const steerPromptTurn = Effect.fn("RunStreamTransport.steerPromptTurn")(function* (
+          next: SessionTurnInput,
+        ) {
+          if (closed || input.footer.isClosed) {
+            return yield* Effect.fail(new Error("session closed"))
+          }
+          if (state.fault) {
+            yield* Effect.fail(state.fault)
+            return
+          }
+          const req = buildPromptRequest(input.sessionID, next)
+          input.trace?.write("send.prompt.steer", { sessionID: input.sessionID })
+          yield* Effect.promise(() => input.sdk.session.promptAsync(req)).pipe(
+            Effect.tap(() =>
+              Effect.sync(() => {
+                input.trace?.write("send.prompt.steer.ok", { sessionID: input.sessionID })
+              }),
+            ),
+            Effect.mapError((error) => {
+              input.trace?.write("send.prompt.steer.error", {
+                sessionID: input.sessionID,
+                error: formatUnknownError(error),
+              })
+              return error
+            }),
+          )
+        })
+
         const selectSubagent = Effect.fn("RunStreamTransport.selectSubagent")((sessionID: string | undefined) =>
           Effect.sync(() => {
             if (closed) {
@@ -1431,6 +1476,7 @@ function createLayer(input: StreamInput) {
 
         return Service.of({
           runPromptTurn,
+          steerPromptTurn,
           selectSubagent,
           replayOnResize,
           close,
@@ -1455,6 +1501,7 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
 
   return {
     runPromptTurn: (next) => runtime.runPromise((svc) => svc.runPromptTurn(next)),
+    steerPromptTurn: (next) => runtime.runPromise((svc) => svc.steerPromptTurn(next)),
     selectSubagent: (sessionID) => runtime.runSync((svc) => svc.selectSubagent(sessionID)),
     replayOnResize: (next) => runtime.runPromise((svc) => svc.replayOnResize(next)),
     close: () => runtime.runPromise((svc) => svc.close()),

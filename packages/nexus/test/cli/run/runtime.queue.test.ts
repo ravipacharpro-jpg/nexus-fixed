@@ -526,4 +526,136 @@ describe("run runtime queue", () => {
     ui.submit("one")
     await expect(task).rejects.toThrow("boom")
   })
+
+  test("steers mid-task corrections instead of queueing them", async () => {
+    const ui = footer()
+    const seen: string[] = []
+    const steered: string[] = []
+    let wake: (() => void) | undefined
+    const gate = new Promise<void>((resolve) => {
+      wake = resolve
+    })
+
+    const task = runPromptQueue({
+      footer: ui.api,
+      onSteer: async (input) => {
+        steered.push(input.text)
+      },
+      run: async (input) => {
+        seen.push(input.text)
+        if (seen.length === 1) {
+          await gate
+          return
+        }
+
+        ui.api.close()
+      },
+    })
+
+    ui.submit("one")
+    await Promise.resolve()
+    await Promise.resolve()
+    expect(seen).toEqual(["one"])
+
+    ui.submit("correction")
+    await Promise.resolve()
+    await Promise.resolve()
+
+    expect(steered).toEqual(["correction"])
+    const queuedTexts = ui.events.flatMap((item) =>
+      item.type === "queued.prompts" ? item.prompts.map((entry) => entry.prompt.text) : [],
+    )
+    expect(queuedTexts).not.toContain("correction")
+    expect(ui.commits.map((item) => item.text)).toContain("Steering current task…")
+    expect(ui.commits.map((item) => item.text)).not.toContain("Got it — queued; current task continues…")
+
+    wake?.()
+    ui.api.close()
+    await task
+
+    expect(seen).toEqual(["one"])
+  })
+
+  test("falls back to the queue when steering fails", async () => {
+    const ui = footer()
+    const seen: string[] = []
+    let wake: (() => void) | undefined
+    const gate = new Promise<void>((resolve) => {
+      wake = resolve
+    })
+
+    const task = runPromptQueue({
+      footer: ui.api,
+      onSteer: async () => {
+        throw new Error("down")
+      },
+      run: async (input) => {
+        seen.push(input.text)
+        if (seen.length === 1) {
+          await gate
+          return
+        }
+
+        ui.api.close()
+      },
+    })
+
+    ui.submit("one")
+    await Promise.resolve()
+    await Promise.resolve()
+    ui.submit("correction")
+    await new Promise((resolve) => setImmediate(resolve))
+
+    expect(ui.commits.map((item) => item.text).join("\n")).toContain("Steer failed")
+    expect(ui.commits.map((item) => item.text).join("\n")).toContain("queued instead")
+    expect(ui.events.findLast((item) => item.type === "queue")).toEqual({ type: "queue", queue: 1 })
+
+    wake?.()
+    await task
+
+    expect(seen).toEqual(["one", "correction"])
+  })
+
+  test("still queues shell prompts during an active turn", async () => {
+    const ui = footer()
+    const seen: string[] = []
+    const steered: string[] = []
+    let wake: (() => void) | undefined
+    const gate = new Promise<void>((resolve) => {
+      wake = resolve
+    })
+
+    const task = runPromptQueue({
+      footer: ui.api,
+      onSteer: async (input) => {
+        steered.push(input.text)
+      },
+      run: async (input) => {
+        seen.push(input.text)
+        if (seen.length === 1) {
+          await gate
+          return
+        }
+
+        ui.api.close()
+      },
+    })
+
+    ui.submit("one")
+    await Promise.resolve()
+    await Promise.resolve()
+    ui.submit("ls", "shell")
+    await Promise.resolve()
+    await Promise.resolve()
+
+    // Shell prompts bypass steering and queue silently by pre-existing design.
+    expect(steered).toEqual([])
+    expect(ui.commits.map((item) => item.text)).toEqual(["one", "Got it — working on it…"])
+
+    wake?.()
+    ui.api.close()
+    await task
+
+    expect(seen).toEqual(["one"])
+  })
 })

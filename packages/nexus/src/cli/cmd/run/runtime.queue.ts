@@ -4,6 +4,12 @@
 // here. The queue drains one turn at a time; ordinary prompts waiting behind
 // an active ordinary turn are exposed for edit/removal until they begin.
 //
+// When `onSteer` is provided, a correction typed during an active turn
+// bypasses the local queue entirely: it is admitted into the running
+// session immediately so the server loop picks it up at its next safe
+// boundary, instead of waiting behind the whole task. Steer failures fall
+// back to the local queue so corrections are never silently lost.
+//
 // The queue also handles /exit, /quit, and /new commands, empty-prompt rejection,
 // and tracks per-turn wall-clock duration for the footer status line.
 //
@@ -29,6 +35,12 @@ export type QueueInput = {
   trace?: Trace
   onSend?: (prompt: RunPrompt) => void
   onNewSession?: () => void | Promise<void>
+  /**
+   * Admit one prompt into the running session immediately (steer), without
+   * queueing behind the active turn. Optional: when absent, mid-task
+   * corrections fall back to the local serial queue.
+   */
+  onSteer?: (prompt: RunPrompt) => Promise<void>
   run: (prompt: RunPrompt, signal: AbortSignal) => Promise<void>
 }
 
@@ -50,6 +62,10 @@ function queuedAcknowledgement(): string {
   return "Got it — queued; current task continues…"
 }
 
+function steeringAcknowledgement(): string {
+  return "Steering current task…"
+}
+
 function defer<T = void>(): Deferred<T> {
   let resolve!: (value: T | PromiseLike<T>) => void
   let reject!: (error?: unknown) => void
@@ -64,8 +80,10 @@ function defer<T = void>(): Deferred<T> {
 // Runs the prompt queue until the footer closes.
 //
 // Subscribes to footer prompt events and drains operations through input.run().
-// Ordinary prompts submitted during an ordinary active turn remain local and
-// are exposed by the footer for edit/removal until their turn begins.
+// Ordinary prompts submitted during an ordinary active turn are steered into
+// the running session via input.onSteer() when available; without onSteer
+// they remain local and are exposed by the footer for edit/removal until
+// their turn begins.
 export async function runPromptQueue(input: QueueInput): Promise<void> {
   const stop = defer<{ type: "closed" }>()
   const done = defer()
@@ -303,6 +321,54 @@ export async function runPromptQueue(input: QueueInput): Promise<void> {
       !prompt.command &&
       !isNewCommand(prompt.text)
     ) {
+      // Steer the running task instead of queueing behind it: admit the
+      // correction immediately so the server loop picks it up at its next
+      // safe boundary. The prompt is never placed on the local queue, so a
+      // later drain cannot submit it a second time.
+      if (input.onSteer && !state.closed) {
+        const steered: RunPrompt = {
+          ...prompt,
+          messageID: prompt.messageID ?? MessageID.ascending(),
+        }
+        const commit = {
+          kind: "user",
+          text: steered.text,
+          phase: "start",
+          source: "system",
+          messageID: steered.messageID,
+        } as const
+        input.trace?.write("ui.commit", commit)
+        input.footer.append(commit)
+        input.onSend?.(steered)
+        const ack = {
+          kind: "system",
+          text: steeringAcknowledgement(),
+          phase: "progress",
+          source: "system",
+        } as const
+        input.trace?.write("ui.commit", ack)
+        input.footer.append(ack)
+        void input
+          .onSteer(steered)
+          .catch((error) => {
+            // Steer failed: fall back to the local queue so the correction
+            // is never silently lost, and say so plainly.
+            state.queue.push(steered)
+            syncQueue()
+            const fallback = {
+              kind: "system",
+              text: `Steer failed (${error instanceof Error ? error.message : String(error)}); queued instead — current task continues…`,
+              phase: "progress",
+              source: "system",
+            } as const
+            input.trace?.write("ui.commit", fallback)
+            input.footer.append(fallback)
+          })
+          .finally(() => {
+            drain()
+          })
+        return
+      }
       const queued: FooterQueuedPrompt = {
         messageID: MessageID.ascending(),
         partID: PartID.ascending(),
