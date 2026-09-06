@@ -54,3 +54,12 @@ test("blockerReport names the key, last error, and tried attempts", () => {
   assert.match(report, /second boom/)
   assert.match(report, /#1 fix/)
 })
+
+test("blocker appends the classified cause and next action", () => {
+  const tracker = new RepairTracker(2)
+  tracker.record("task", { step: "fetch", error: "429 too many requests" })
+  tracker.record("task", { step: "fetch", error: "quota exceeded for now" })
+  const summary = tracker.summary("task")
+  assert.match(summary, /Likely cause: rate-limit/)
+  assert.match(summary, /Back off/)
+})

@@ -1,3 +1,5 @@
+import { classifyError } from "@nexus-ai/core/session/orchestrator/error-classification"
+
 /**
  * Plain-TS error-repair tracker for non-Effect agents.
  * Mirrors `@nexus-ai/core` SessionRepair semantics: every failure records
@@ -46,7 +48,8 @@ export function blockerReport(key: string, history: AttemptRecord[], maxAttempts
   const next = stagnant
     ? "Failure repeats identically — automatic repair stopped instead of retrying the same command unchanged. Manual fix needed."
     : `Attempt budget (${maxAttempts}) exhausted. Manual fix needed.`
-  return `Blocked after ${history.length} attempt(s) on "${key}". Last error: ${last.error.split("\n")[0]?.trim()}. Failed step: ${last.step}. Files changed: ${files}. Tried: ${tried}. ${next}`
+  const classified = classifyError(last.error)
+  return `Blocked after ${history.length} attempt(s) on "${key}". Last error: ${last.error.split("\n")[0]?.trim()}. Failed step: ${last.step}. Files changed: ${files}. Tried: ${tried}. ${next} Likely cause: ${classified.kind} — ${classified.advice}`
 }
 
 export class RepairTracker {

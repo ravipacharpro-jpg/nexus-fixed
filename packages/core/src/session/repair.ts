@@ -1,6 +1,7 @@
 export * as SessionRepair from "./repair"
 
 import { Effect } from "effect"
+import { classifyError } from "./orchestrator/error-classification"
 
 /**
  * Error-repair loop for fallible tasks.
@@ -58,7 +59,7 @@ export function fingerprint(message: string, filesChanged?: ReadonlyArray<string
   return `${firstLine.trim().slice(0, 240)}|${files}`
 }
 
-/** Exact blocker report from a repair history. */
+/** Exact blocker report from a repair history, with classified next action. */
 export function blockerReport(history: RepairHistory): string {
   const count = history.attempts.length
   const last = history.attempts[count - 1]
@@ -69,7 +70,8 @@ export function blockerReport(history: RepairHistory): string {
   const next = stagnant
     ? "Failure repeats identically — automatic repair stopped instead of retrying the same command unchanged. Manual fix needed."
     : `Attempt budget (${history.maxAttempts}) exhausted. Manual fix needed.`
-  return `Blocked after ${count} attempt(s) on "${history.key}". Last error: ${last.message.split("\n")[0]?.trim()}. Failed step: ${last.step ?? "unknown"}. Files changed: ${files}. Tried: ${tried}. ${next}`
+  const classified = classifyError(last.message)
+  return `Blocked after ${count} attempt(s) on "${history.key}". Last error: ${last.message.split("\n")[0]?.trim()}. Failed step: ${last.step ?? "unknown"}. Files changed: ${files}. Tried: ${tried}. ${next} Likely cause: ${classified.kind} — ${classified.advice}`
 }
 
 const historyFor = (key: string, maxAttempts: number, attempts: ReadonlyArray<FailureRecord>): RepairHistory => ({
