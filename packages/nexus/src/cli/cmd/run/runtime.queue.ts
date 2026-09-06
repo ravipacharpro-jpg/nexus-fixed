@@ -316,7 +316,6 @@ export async function runPromptQueue(input: QueueInput): Promise<void> {
     if (
       active &&
       active.mode !== "shell" &&
-      !active.command &&
       prompt.mode !== "shell" &&
       !prompt.command &&
       !isNewCommand(prompt.text)
