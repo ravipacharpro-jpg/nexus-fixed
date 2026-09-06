@@ -252,8 +252,11 @@ check_version() {
         if [[ "$installed_version" == "$specific_version" ]]; then
             # On Termux, ensure the wrapper has the LD_PRELOAD fix before skipping
             if [ "$is_termux" = "true" ] && [ -f "$INSTALL_DIR/nexus" ]; then
-                if ! grep -q "NEXUS_TERMUX_DIRECT_LOADER_V3" "$INSTALL_DIR/nexus"; then
-                    print_message info "${MUTED}Version ${NC}$specific_version${MUTED} installed, but launcher needs update. Refreshing...${NC}"
+                # A stale wrapper can report the right version while its companion
+                # binary was removed or installed under a different path. Force a
+                # repair instead of exiting successfully in that case.
+                if ! grep -q "NEXUS_TERMUX_DIRECT_LOADER_V3" "$INSTALL_DIR/nexus" || [ ! -x "$INSTALL_DIR/nexus.bin" ]; then
+                    print_message info "${MUTED}Version ${NC}$specific_version${MUTED} installed, but launcher or binary needs repair. Refreshing...${NC}"
                     return 0
                 fi
             fi
