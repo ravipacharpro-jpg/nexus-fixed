@@ -1,5 +1,6 @@
 import { LayerNode } from "@nexus-ai/core/effect/layer-node"
 import { Context, Effect, Layer } from "effect"
+import { existsSync } from "node:fs"
 import open from "open"
 
 export interface LaunchOptions {
@@ -99,6 +100,7 @@ interface BrowserHandle {
 
 const DEFAULT_SESSION_ID = "default"
 const NAVIGATION_TIMEOUT = 30_000
+const DEFAULT_CHROMIUM_PATH = "/usr/bin/chromium"
 const SENSITIVE_ACTION =
   /\b(?:log[ -]?in|sign[ -]?in|signin|password|passcode|otp|one[ -]?time(?: password| code)?|captcha|recaptcha|2fa|mfa|verification code|credit card|card number|cvv|cvc|payment|checkout|purchase|buy now|place order|submit|confirm order|authorize payment)\b/i
 const sessions = new Map<string, BrowserHandle>()
@@ -185,11 +187,15 @@ const layer = Layer.succeed(
       const existing = sessions.get(id)
       if (existing) return { id, reused: true, url: existing.page.url() } satisfies BrowserSession
       const playwright = yield* Effect.tryPromise({ try: loadPlaywright, catch: asError })
+      const executablePath =
+        options.executablePath ??
+        process.env.NEXUS_BROWSER_EXECUTABLE ??
+        (existsSync(DEFAULT_CHROMIUM_PATH) ? DEFAULT_CHROMIUM_PATH : undefined)
       const browser = yield* Effect.tryPromise({
         try: () =>
           playwright.chromium.launch({
             headless: options.headless ?? true,
-            executablePath: options.executablePath,
+            executablePath,
             channel: options.channel,
             args: options.args,
           }),
