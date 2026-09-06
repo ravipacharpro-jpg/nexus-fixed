@@ -253,13 +253,13 @@ for (const item of targets) {
 if (Script.release) {
   for (const key of Object.keys(binaries)) {
     if (key.includes("linux")) {
-      await $`tar -czf ../../${key}-${Script.version}.tar.gz *`.cwd(`dist/${key}/bin`)
+      await $`tar -czf ${key}-${Script.version}.tar.gz *`.cwd(`dist/${key}/bin`)
     } else {
-      await $`zip -r ../../${key}-${Script.version}.zip *`.cwd(`dist/${key}/bin`)
+      await $`zip -r ${key}-${Script.version}.zip *`.cwd(`dist/${key}/bin`)
     }
   }
-  const releaseFiles = Object.keys(binaries).map((key) => (key.includes("linux") ? `./dist/${key}-${Script.version}.tar.gz` : `./dist/${key}-${Script.version}.zip`))
-  await $`gh release upload v${Script.version} ${releaseFiles} --clobber --repo ${process.env.GH_REPO}`
+  const releaseFiles = Object.keys(binaries).map((key) => (key.includes("linux") ? `./dist/${key}/bin/${key}-${Script.version}.tar.gz` : `./dist/${key}/bin/${key}-${Script.version}.zip`))
+  console.log(`release archives ready: ${releaseFiles.join(", ")}`)
 }
 
 export { binaries }
