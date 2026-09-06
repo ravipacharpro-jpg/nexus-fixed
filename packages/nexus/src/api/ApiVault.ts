@@ -159,9 +159,12 @@ function normalizeVault(value: Record<string, unknown>): ApiVaultData {
     value.providers && typeof value.providers === "object" ? (value.providers as Record<string, unknown>) : {}
   for (const [provider, entries] of Object.entries(rawProviders)) {
     if (!Array.isArray(entries)) continue
-    providers[provider.toLowerCase()] = entries
+    const normalized = entries
       .map((entry) => normalizeEntry(entry, provider.toLowerCase()))
       .filter((entry): entry is ApiKeyEntry => Boolean(entry))
+    providers[provider.toLowerCase()] = normalized.filter(
+      (entry, index) => normalized.findIndex((candidate) => candidate.key === entry.key) === index,
+    )
   }
   const usage: Record<string, ProviderUsage> = {}
   const rawUsage = value.usage && typeof value.usage === "object" ? (value.usage as Record<string, unknown>) : {}

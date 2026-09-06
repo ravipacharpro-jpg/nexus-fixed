@@ -56,7 +56,7 @@ function hasUsableProviderCredential(
 ): boolean {
   if (provider.id === "ollama" || provider.id === "opencode" || provider.id === "omniroute") return true
   if (provider.source === "env" || provider.source === "api") return true
-  const keys = [...(provider.key ? [provider.key] : []), ...configuredProviderKeys(apiKeys, provider.id)]
+  const keys = [...new Set([...(provider.key ? [provider.key.trim()] : []), ...configuredProviderKeys(apiKeys, provider.id)])]
   if (keys.length === 0) return false
   const now = Date.now()
   return keys.some((key) => {
@@ -74,15 +74,16 @@ function mergeApiVaultKeys(configured: unknown): Record<string, string[]> {
   if (configured && typeof configured === "object" && !Array.isArray(configured)) {
     for (const [provider, values] of Object.entries(configured as Record<string, unknown>)) {
       if (Array.isArray(values)) {
-        result[provider] = values.filter((value): value is string => {
+        const usable = values.filter((value): value is string => {
           if (typeof value !== "string" || value.trim().length === 0) return false
-          const status = getCachedKeyStatus(value)
+          const status = getCachedKeyStatus(value.trim())
           if (!status) return true
           if (status.status === "invalid") return false
           if (status.status === "suspended" && status.suspendedUntil && Date.parse(status.suspendedUntil) > Date.now())
             return false
           return true
         })
+        result[provider] = [...new Set(usable.map((value) => value.trim()))]
       }
     }
   }
