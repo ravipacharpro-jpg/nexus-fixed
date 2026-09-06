@@ -14,6 +14,12 @@ case "$(uname -s)" in
   Linux) os="linux" ;;
   *) echo "Unsupported OS: $(uname -s). Current release installer supports Linux and Termux." >&2; exit 1 ;;
 esac
+if [ -n "${PREFIX:-}" ] && [ -n "${TERMUX_VERSION:-}" ]; then
+  echo "NEXUS release binary is not yet native-Termux compatible (it requires glibc; Termux uses Android bionic)." >&2
+  echo "Use NEXUS inside proot-distro Ubuntu/Debian for now, or run from source with a supported Bun runtime." >&2
+  echo "A dedicated Android/Bionic build is required for direct Termux installation." >&2
+  exit 1
+fi
 case "$(uname -m)" in
   x86_64|amd64) arch="x64" ;;
   aarch64|arm64) arch="arm64" ;;
