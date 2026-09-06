@@ -109,6 +109,8 @@ describe("offline provider catalog fallback", () => {
     expect(Object.keys(catalog)).toContain("groq")
     expect(Object.keys(catalog)).toContain("openai")
     expect(Object.keys(catalog)).toContain("anthropic")
+    expect(catalog.omniroute.api).toBe("http://127.0.0.1:20128/v1")
+    expect(catalog.omniroute.models.auto).toBeDefined()
     expect(catalog.groq.models["openai/gpt-oss-120b"].modalities).toEqual({ input: ["text"], output: ["text"] })
     expect(catalog.groq.models["llama-3.1-8b-instant"]).toBeUndefined()
   })
@@ -118,6 +120,7 @@ describe("preferred defaults", () => {
   test("does not retain known stale Groq or Gemini defaults", async () => {
     const { PREFERRED_MODELS } = await import("@/provider/rotation")
 
+    expect(PREFERRED_MODELS.omniroute).toEqual(["auto"])
     expect(PREFERRED_MODELS.groq).toContain("openai/gpt-oss-120b")
     expect(PREFERRED_MODELS.groq).not.toContain("llama-3.1-8b-instant")
     expect(PREFERRED_MODELS.google).toContain("gemini-3.6-flash")

@@ -7,6 +7,12 @@ describe("API vault provider validation contracts", () => {
     expect(validationStatusForResponse(PROVIDER_CONTRACTS.opencode, 200)).toBe("unknown")
   })
 
+  test("registers OmniRoute as an optional local OpenAI-compatible gateway", () => {
+    expect(PROVIDER_CONTRACTS.omniroute.baseURL).toBe("http://127.0.0.1:20128/v1")
+    expect(PROVIDER_CONTRACTS.omniroute.modelsEndpointPublic).toBe(true)
+    expect(PROVIDER_CONTRACTS.omniroute.curatedModels?.map((model) => model.id)).toEqual(["auto"])
+  })
+
   test("maps provider authentication and quota failures to usable vault statuses", () => {
     expect(validationStatusForResponse(PROVIDER_CONTRACTS.xai, 400)).toBe("invalid")
     expect(validationStatusForResponse(PROVIDER_CONTRACTS.perplexity, 401)).toBe("invalid")

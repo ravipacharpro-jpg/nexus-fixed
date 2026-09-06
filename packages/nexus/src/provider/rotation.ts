@@ -114,6 +114,7 @@ export class RotationEngine {
 }
 
 export const PROVIDER_FALLBACK_ORDER = [
+  "omniroute",
   "groq",
   "openrouter",
   "cloudflare-workers-ai",
@@ -136,6 +137,7 @@ export const PROVIDER_FALLBACK_ORDER = [
 
 /** Canonical low-cost/free model order used by setup, default selection, and model tests. */
 export const PREFERRED_MODELS = {
+  omniroute: ["auto"],
   groq: ["openai/gpt-oss-120b", "openai/gpt-oss-20b", "qwen/qwen3.6-27b"],
   openrouter: [
     "meta-llama/llama-3.1-8b-instruct:free",
@@ -310,7 +312,11 @@ export function modelForProvider(providerID: string, models: Record<string, unkn
 
 export function fallbackProviders(configured: Record<string, unknown>, available: string[]): string[] {
   return available
-    .filter((id) => configured[id] !== undefined || ["ollama", "groq", "openrouter", "google", "openai"].includes(id))
+    .filter(
+      (id) =>
+        configured[id] !== undefined ||
+        ["ollama", "omniroute", "groq", "openrouter", "google", "openai"].includes(id),
+    )
     .sort((a, b) => providerPriority(a) - providerPriority(b) || a.localeCompare(b))
 }
 
