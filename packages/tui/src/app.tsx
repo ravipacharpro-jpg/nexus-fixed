@@ -705,15 +705,6 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
         },
       },
       {
-        name: "browser.control",
-        title: "Take direct control of the browser",
-        description: "NEXUS does not dispatch web workers on this device",
-        category: "Agent",
-        run: () => {
-          dialog.replace(() => <DialogBrowserAdapter />)
-        },
-      },
-      {
         name: "agent.cycle",
         title: "Agent cycle",
         category: "Agent",
