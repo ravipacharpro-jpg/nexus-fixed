@@ -3,7 +3,7 @@ export * as Executor from "./executor"
 import { Effect } from "effect"
 import { SessionRepair } from "../repair"
 import type { Phase, Plan } from "./planner"
-import { fromShell, toPhaseOutcome } from "./tool-result"
+import { fromShell, toPhaseOutcome, type ToolResult } from "./tool-result"
 
 /**
  * Phase outcome produced by a step runner. Runners close over their own
@@ -22,7 +22,7 @@ export type StepContext = {
   readonly previous: ReadonlyArray<SessionRepair.FailureRecord>
 }
 
-export type StepRunner<E> = (phase: Phase, context: StepContext) => Effect.Effect<PhaseOutcome, E>
+export type StepRunner<E> = (phase: Phase, context: StepContext) => Effect.Effect<PhaseOutcome | ToolResult, E>
 
 export type DescribeFailure<E> = (error: E) => {
   readonly message: string
@@ -33,7 +33,7 @@ export type PhaseReport = {
   readonly phase: Phase
   readonly repaired: boolean
   readonly attempts: number
-  readonly outcome: PhaseOutcome | undefined
+  readonly outcome: PhaseOutcome | ToolResult | undefined
   readonly blocker: string | undefined
 }
 

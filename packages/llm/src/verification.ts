@@ -14,15 +14,6 @@ import { Effect, Schema } from "effect"
  * in the caller (core/session/verification); this module only evaluates the
  * supplied facts so CLI, SDK, TUI and session runners share one gate.
  */
-export class VerificationRequirement extends Schema.Class<VerificationRequirement>(
-  "LLM.VerificationRequirement",
-)({
-  exitCode: Schema.optional(Schema.Int),
-  expectedFiles: Schema.optional(Schema.Array(Schema.String)),
-  tests: Schema.optional(Schema.Array(Schema.String)),
-  requireEvidence: Schema.optional(Schema.Boolean),
-}) {}
-
 /**
  * Note: `expectedFiles` is informational only. Enforcement uses
  * `missingFiles`, which the caller computes via the filesystem

@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto"
 import { mkdir, readFile, writeFile } from "node:fs/promises"
+import { tmpdir } from "node:os"
 import { basename, join, resolve } from "node:path"
 import { DualWorkerPool } from "./DualWorkerPool"
 import { CodeReader, type FileSummary } from "./SeniorDevAgent"
@@ -273,7 +274,7 @@ export class ManagerAgent {
   }
 
   private async report(taskId: string, status: TeamStatus, onProgress?: ProgressCallback) {
-    await writeJson(join("/tmp", "nexus", "teams", taskId, "status.json"), status)
+    await writeJson(join(tmpdir(), "nexus", "teams", taskId, "status.json"), status)
     await onProgress?.(status)
   }
 
@@ -289,7 +290,7 @@ export class ManagerAgent {
     } = {},
   ): Promise<ProjectResult> {
     const taskId = options.taskId ?? `task-${Date.now().toString(36)}-${randomUUID().slice(0, 6)}`
-    const ipcRoot = join("/tmp", "nexus", "teams", taskId)
+    const ipcRoot = join(tmpdir(), "nexus", "teams", taskId)
     await mkdir(ipcRoot, { recursive: true })
     const capacity = this.capacity
     await this.smartManager.accept(taskId, task, root, capacity)

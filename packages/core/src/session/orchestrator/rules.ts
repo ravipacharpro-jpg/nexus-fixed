@@ -42,14 +42,6 @@ export const RULES: ReadonlyArray<Rule> = [
   { id: "report-separately", text: "Report completed, skipped, and unverified work separately — never mix them." },
 ]
 
-const BY_ID: ReadonlyMap<RuleID, Rule> = new Map(RULES.map((rule) => [rule.id, rule]))
-
-export function rule(id: RuleID): Rule {
-  const found = BY_ID.get(id)
-  if (!found) throw new Error(`Unknown execution rule: ${id}`)
-  return found
-}
-
 /** Rules governing each phase kind. Every kind gets at least one rule. */
 export function rulesForPhase(kind: PhaseKind): ReadonlyArray<RuleID> {
   switch (kind) {

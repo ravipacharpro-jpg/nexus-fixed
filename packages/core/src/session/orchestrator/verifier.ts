@@ -4,6 +4,7 @@ import { Effect, FileSystem } from "effect"
 import { SessionVerification } from "../verification"
 import { Verification } from "@nexus-ai/llm"
 import { deriveContract, type SuccessContract } from "./contract"
+import { ToolResult, toTestCheck, toUnresolvedErrors } from "./tool-result"
 import { executePhase } from "./executor"
 import type { DescribeFailure, PhaseReport, StepRunner } from "./executor"
 import type { Phase, Plan } from "./planner"
@@ -33,16 +34,30 @@ const webEvidenceBlock = (evidence: unknown): string | undefined => {
  * exit code 0, expected files present on disk, no unresolved error,
  * and real evidence — never assumptions.
  */
+type OutcomeInput =
+  | { readonly exitCode?: number; readonly evidence?: unknown; readonly error?: string }
+  | ToolResult
+
+const isToolResult = (outcome: OutcomeInput): outcome is ToolResult =>
+  typeof outcome === "object" && outcome !== null && typeof (outcome as { success?: unknown }).success === "boolean"
+
 export const verifyPhase = Effect.fn("OrchestratorVerifier.verifyPhase")(function* (
   phase: Phase,
-  outcome: { readonly exitCode?: number; readonly evidence?: unknown; readonly error?: string },
+  outcome: OutcomeInput,
 ) {
+  const contracted = isToolResult(outcome) ? outcome : undefined
+  const errors = contracted ? toUnresolvedErrors(contracted) : outcome.error ? [outcome.error] : []
+  const missing = contracted?.filesMissing?.map((file) => `expected file missing: ${file}`) ?? []
+  const tests = contracted ? toTestCheck(contracted) : undefined
   const webBlock = webEvidenceBlock(outcome.evidence)
   return yield* SessionVerification.verifyCompletion(
     new SessionVerification.Request({
       exitCode: outcome.exitCode,
       expectedFiles: phase.files ? [...phase.files] : undefined,
-      unresolvedErrors: [...(outcome.error ? [outcome.error] : []), ...(webBlock ? [webBlock] : [])],
+      testsAttempted: tests?.attempted,
+      testsPassed: tests?.passed,
+      testOutput: tests?.output,
+      unresolvedErrors: [...errors, ...missing, ...(webBlock ? [webBlock] : [])],
       evidence: outcome.evidence,
     }),
   )
@@ -106,7 +121,8 @@ export const runOrchestrated = Effect.fn("OrchestratorVerifier.runOrchestrated")
         phases,
         blocker:
           `Phase "${phase.title}" unverified: ${verification.reason ?? "unverified"}. ` +
-          `Halting plan instead of building on unverified work. ${Verification.unverifiedReport(verification)}`,
+          `Halting plan instead of building on unverified work. ${Verification.unverifiedReport(verification)} ` +
+          `Governing rules: ${phase.rules.join(", ")}.`,
       } satisfies OrchestratedResult
     }
   }

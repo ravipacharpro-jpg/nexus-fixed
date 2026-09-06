@@ -1,5 +1,6 @@
 import { execFile } from "node:child_process"
 import { mkdir, writeFile } from "node:fs/promises"
+import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { promisify } from "node:util"
 import { Planner } from "@nexus-ai/core/session/orchestrator/planner"
@@ -40,7 +41,7 @@ export type LiaisonOptions = {
   capacityProbe?: CapacityProbe
 }
 
-const statusRoot = join("/tmp", "nexus", "liaison")
+const statusRoot = join(tmpdir(), "nexus", "liaison")
 
 export function classifyMessage(message: string): MessageType {
   const lower = message.toLowerCase().trim()

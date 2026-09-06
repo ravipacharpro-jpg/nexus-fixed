@@ -265,6 +265,48 @@ describe("Verifier.runOrchestrated", () => {
     expect(result.success).toBe(true)
   })
 
+  test("gates contract results including failed tests and missing files", async () => {
+    const plan = Planner.createPlan({ goal: "Do", steps: ["One"] })
+    const tested = await runWithFs(
+      runOrchestrated({
+        key: "orch-contract-tests",
+        plan,
+        runner: (phase) =>
+          Effect.succeed(
+            phase.kind === "act"
+              ? {
+                success: false,
+                testsAttempted: true,
+                testsPassed: false,
+                output: "3 failed",
+                error: "tests failed",
+                evidence: "test run",
+              }
+              : { evidence: `evidence for ${phase.id}` },
+          ),
+        describe: describeBoom,
+      }),
+    )
+    expect(tested.success).toBe(false)
+    expect(tested.blocker).toContain("tests failed")
+
+    const missing = await runWithFs(
+      runOrchestrated({
+        key: "orch-contract-files",
+        plan,
+        runner: (phase) =>
+          Effect.succeed(
+            phase.kind === "act"
+              ? { success: true, filesMissing: ["out.txt"], evidence: "ran" }
+              : { evidence: `evidence for ${phase.id}` },
+          ),
+        describe: describeBoom,
+      }),
+    )
+    expect(missing.success).toBe(false)
+    expect(missing.blocker).toContain("expected file missing: out.txt")
+  })
+
   test("reports the repair blocker when a phase cannot be executed", async () => {
     const plan = Planner.createPlan({ goal: "Do", steps: ["One"] })
     const result = await runWithFs(

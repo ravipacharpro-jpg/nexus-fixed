@@ -434,14 +434,23 @@ const layer = Layer.effect(
       // while tool errors it produced remain unresolved. Pre-existing
       // failures stay out via the baseline. Interrupts and defects escape
       // through runTurn above and never reach this gate.
-      const failed = collectUnresolvedToolCalls(yield* getContext(input.sessionID), baselineFailed)
+      const endContext = yield* getContext(input.sessionID)
+      const failed = collectUnresolvedToolCalls(endContext, baselineFailed)
       const errors = failed.map(formatToolError)
+      const toolCalls = endContext.flatMap((message) =>
+        message.type === "assistant" ? message.content.filter((part) => part.type === "tool") : [],
+      )
+      const hasAssistantText = endContext.some(
+        (message) =>
+          message.type === "assistant" &&
+          message.content.some((part) => part.type === "text" && part.text.trim().length > 0),
+      )
       // FSUtil is a FileSystem: the gate takes no expected files here, but
       // the requirement rides the type so file-backed callers cannot drop it.
       const verification = yield* SessionVerification.verifyCompletion(
         new SessionVerification.Request({
           unresolvedErrors: errors,
-          evidence: `drain completed: ${turns} turn(s)`,
+          evidence: { turns, toolCalls: toolCalls.length, hasAssistantText },
         }),
       ).pipe(Effect.provideService(FileSystem.FileSystem, fs))
       if (!verification.success) {
