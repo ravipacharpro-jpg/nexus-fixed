@@ -54,7 +54,8 @@ function hasUsableProviderCredential(
   provider: Pick<Info, "id" | "key" | "source">,
   apiKeys: Record<string, string[]>,
 ): boolean {
-  if (provider.id === "ollama" || provider.id === "opencode" || provider.id === "omniroute") return true
+  // OpenCode is hosted; OmniRoute is a user's optional local gateway.
+  if (provider.id === "ollama" || provider.id === "opencode") return true
   if (provider.source === "env" || provider.source === "api") return true
   const keys = [...new Set([...(provider.key ? [provider.key.trim()] : []), ...configuredProviderKeys(apiKeys, provider.id)])]
   if (keys.length === 0) return false
@@ -2309,8 +2310,7 @@ const layer = Layer.effect(
           (p) =>
             configured.length === 0 ||
             configured.includes(p.id) ||
-            p.id === "opencode" ||
-            p.id === "omniroute",
+            p.id === "opencode",
         )
         .filter((p) => !isDeprecatedFreeProvider(p.id))
         .filter((p) => hasUsableProviderCredential(p, effectiveApiKeys))
@@ -2359,8 +2359,7 @@ const layer = Layer.effect(
           (p) =>
             configured.length === 0 ||
             configured.includes(p.id) ||
-            p.id === "opencode" ||
-            p.id === "omniroute",
+            p.id === "opencode",
         )
         .filter((p) => hasUsableProviderCredential(p, effectiveApiKeys))
         .sort((a, b) => providerPriority(a.id) - providerPriority(b.id) || a.id.localeCompare(b.id))
