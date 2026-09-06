@@ -1,0 +1,26 @@
+External findings (2026-09-06):
+
+Vercel Labs Skills: https://github.com/vercel-labs/skills
+- MIT-licensed open agent skills CLI (`npx skills`).
+- README supports install/list/find/use/update/remove/init; sources include GitHub/GitLab/git/local/direct SKILL.md/archive.
+- It installs SKILL.md files into agent/project/global directories and supports OpenCode, Claude Code, Codex, Cursor and many others.
+- It is a skill-management/installation tool, not an LLM provider or autonomous execution engine.
+- Key security implication: downloaded SKILL.md is instruction content; Nexus must treat it as untrusted input, enforce permissions/tool/network policy, and not execute arbitrary scripts implicitly.
+
+OmniRoute: https://github.com/diegosouzapw/OmniRoute
+- Self-hosted local OpenAI-compatible gateway endpoint: http://localhost:20128/v1 (Nexus uses 127.0.0.1).
+- README says install `npm install -g omniroute`, run `omniroute`, dashboard http://localhost:20128, API /v1.
+- README advertises `auto` model and automatic fallback/routing; fresh zero-credential behavior is claimed for pre-wired free backends (OpenCode Free/Felo), but provider terms/access can change.
+- Provider Reference: https://github.com/diegosouzapw/OmniRoute/wiki/Provider-Reference. It lists categories Free/API key/OAuth/Web cookie/Local and says credentials are configured via OmniRoute dashboard; OAuth/session may be required even when no API key is manually entered.
+- OpenCode setup docs: https://www.omniroute.online/cli/ ; base URL http://localhost:20128/v1, model auto, dashboard key normally preferred.
+- Do not promise anonymous/free access universally or bypass provider auth/ToS. Nexus should detect unavailable/auth-required/rate-limited and fall back safely.
+
+Nexus existing skill architecture:
+- packages/nexus/src/skill/index.ts already discovers local/global/project skills, configured cfg.skills.paths and cfg.skills.urls; loads SKILL.md frontmatter/content and exposes Skill tool.
+- packages/nexus/src/skill/discovery.ts downloads index.json skill bundles into Global.Path.cache/skills with atomic version updates; no task-scoped cleanup or task-based remote discovery currently.
+- packages/nexus/src/session/system.ts lists available skills in system prompt; packages/nexus/src/tool/skill.ts lets model load a matched skill.
+- packages/core/src/skill/guidance.ts also has skill guidance in v2.
+- Existing config skills schema is in packages/core/src/v1/config/skills.ts and config.ts imports ConfigSkillsV1.
+- Existing skill loading is permission-aware via Permission.evaluate/disabled, but agent still chooses when to call skill tool; no mandatory pre-task skill planning gate found.
+
+Implementation direction: add task-scoped skill manager/plan phase, trusted sources/allowlist, checksum/version verification, explicit permission manifests, download into temporary task directory, inject selected skills before execution, cleanup on success/failure/cancel with retain-on-debug option. Do not blindly use arbitrary downloaded instructions or delete user-owned skills.

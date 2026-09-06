@@ -1,0 +1,12 @@
+Gateway comparison findings (2026-09-06):
+
+FreeLLMAPI (MIT): https://github.com/tashfeenahmed/freellmapi
+FreeLLMAPI is a self-hosted OpenAI-compatible Node gateway at http://localhost:3001/v1 with a unified bearer key. It aggregates provider keys, exposes /v1/models and chat/responses/messages/completions/embeddings/media endpoints, tracks quotas/cooldowns, uses a fallback chain, and has an MCP server. It requires the user to add provider credentials in its dashboard; free tiers are not anonymous or guaranteed. The local router should not be exposed publicly. It is now registered in Nexus as freellmapi at http://127.0.0.1:3001/v1 with model auto and FREELLMAPI_API_KEY.
+
+LiteLLM (repo): https://github.com/BerriAI/litellm
+MIT status is not asserted by GitHub metadata (license field NOASSERTION; verify per release/file before copying code). It provides a Python SDK/proxy, 100+ provider adapters, OpenAI-compatible endpoints, virtual keys, project/user spend tracking, retries/fallbacks, load balancing, observability callbacks, guardrails and MCP/A2A gateway features. Best Nexus takeaways are provider health scoring, explicit retry/fallback error policies, per-key budgets, route telemetry and an OpenAI-compatible gateway adapter. Avoid embedding the Python proxy in Nexus; reuse concepts or connect as an optional external gateway.
+
+Portkey Gateway (MIT): https://github.com/Portkey-AI/gateway
+Portkey is a TypeScript/Cloudflare-oriented OpenAI-compatible gateway, local endpoint http://localhost:8787/v1, with retries/fallbacks, conditional routing, weighted load balancing, timeout controls, multimodal support, guardrails, and an MCP gateway with auth/access-control/observability. Best Nexus takeaways are declarative route policies, guardrail stages before/after model calls, weighted key/provider pools, and request/tool-call audit events. Do not blindly import enterprise/hosted assumptions; keep Nexus local-first and permission-aware.
+
+Recommended Nexus architecture: keep Nexus as the agent/session/tool orchestrator; support FreeLLMAPI, OmniRoute, LiteLLM and Portkey as optional external OpenAI-compatible routers. Add a generic local-gateway registry with health check, /v1/models discovery, bearer-key vault entry, model aliases (auto/auto:fast/auto:smart), timeout, retryable-status policy, and route telemetry. Do not claim “free without keys”; only route through credentials/configurations the user owns and provider ToS allow.

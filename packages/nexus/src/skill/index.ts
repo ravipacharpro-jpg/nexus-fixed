@@ -100,6 +100,8 @@ export interface Interface {
   readonly all: () => Effect.Effect<Info[]>
   readonly dirs: () => Effect.Effect<string[]>
   readonly available: (agent?: Agent.Info) => Effect.Effect<Info[]>
+  readonly prepareTask: (task: string, agent?: Agent.Info) => Effect.Effect<{ names: string[]; root?: string }>
+  readonly cleanupTask: (scope: { names: string[]; root?: string }, failed?: boolean) => Effect.Effect<void>
 }
 
 const add = Effect.fnUntraced(function* (state: State, match: string, events: EventV2Bridge.Service["Service"]) {
@@ -314,7 +316,64 @@ const layer = Layer.effect(
       return list.filter((skill) => Permission.evaluate("skill", skill.name, agent.permission).action !== "deny")
     })
 
-    return Service.of({ get, require, all, dirs, available })
+    const prepareTask = Effect.fn("Skill.prepareTask")(function* (task: string, agent?: Agent.Info) {
+      const cfg = yield* config.get()
+      const auto = cfg.skills?.auto
+      const urls = auto?.urls ?? []
+      if (auto?.enabled === false || urls.length === 0) return { names: [] }
+
+      const root = path.join(Global.Path.cache, "skills", "tasks", crypto.randomUUID())
+      const downloaded = yield* Effect.forEach(urls, (url) => discovery.pull(url, { root }), {
+        concurrency: 2,
+        discard: false,
+      })
+      const scanState: ScanState = { matches: new Set(), dirs: new Set() }
+      for (const dir of downloaded.flat()) yield* scan(scanState, dir, SKILL_PATTERN, { scope: "task" })
+      const discovered: DiscoveryState = {
+        matches: Array.from(scanState.matches),
+        dirs: Array.from(scanState.dirs),
+      }
+      const s = yield* InstanceState.get(state)
+      const before = new Set(Object.keys(s.skills))
+      yield* loadSkills(s, discovered, events)
+
+      const words = new Set(
+        task
+          .toLowerCase()
+          .split(/[^a-z0-9]+/)
+          .filter((word) => word.length >= 3 && !["the", "and", "for", "with", "from", "that", "this"].includes(word)),
+      )
+      const maxSkills = Math.max(1, Math.min(auto?.maxSkills ?? 3, 8))
+      const added = Object.values(s.skills).filter((skill) => !before.has(skill.name))
+      const selected = added
+        .filter((skill) => !agent || Permission.evaluate("skill", skill.name, agent.permission).action !== "deny")
+        .map((skill) => {
+          const haystack = `${skill.name} ${skill.description ?? ""}`.toLowerCase()
+          const score = [...words].reduce((total, word) => total + (haystack.includes(word) ? 1 : 0), 0)
+          return { skill, score }
+        })
+        .filter((item) => item.score > 0)
+        .sort((a, b) => b.score - a.score || a.skill.name.localeCompare(b.skill.name))
+        .slice(0, maxSkills)
+        .map((item) => item.skill.name)
+
+      for (const skill of added) {
+        if (!selected.includes(skill.name)) delete s.skills[skill.name]
+      }
+
+      yield* Effect.logInfo("auto-selected task skills", { names: selected, sourceCount: urls.length })
+      return { names: selected, root }
+    })
+
+    const cleanupTask = Effect.fn("Skill.cleanupTask")(function* (scope: { names: string[]; root?: string }, failed = false) {
+      const cfg = yield* config.get()
+      if (failed && cfg.skills?.auto?.retainOnFailure) return
+      const s = yield* InstanceState.get(state)
+      for (const name of scope.names) delete s.skills[name]
+      if (scope.root) yield* fsys.remove(scope.root, { recursive: true, force: true }).pipe(Effect.ignore)
+    })
+
+    return Service.of({ get, require, all, dirs, available, prepareTask, cleanupTask })
   }),
 )
 
