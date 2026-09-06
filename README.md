@@ -20,6 +20,23 @@ NEXUS is a Bun-based monorepo for an agentic development environment. It include
 
 ## Quick start
 
+### Install or update the latest release (Linux/Termux)
+
+The following command downloads the latest matching Linux binary and atomically replaces the previous `nexus` binary. It does not remove your local configuration, API vault, memories, or project data:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/ravipacharpro-jpg/Nexus-Agent/main/scripts/install-latest.sh | bash
+```
+
+After installation, reopen your shell or run:
+
+```bash
+export PATH="$HOME/.local/bin:$PATH"
+nexus --version
+```
+
+To update later, run the same installer command again. It always resolves the latest GitHub release for your CPU architecture.
+
 Clone the repository and install workspace dependencies:
 
 ```bash
@@ -32,6 +49,12 @@ Start the development TUI:
 
 ```bash
 bun dev
+```
+
+The same development launcher is also available as:
+
+```bash
+bun nexus
 ```
 
 To start NEXUS in a particular project directory:
