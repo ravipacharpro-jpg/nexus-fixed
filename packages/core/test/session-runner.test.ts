@@ -6,6 +6,8 @@ import {
   Model,
   TransportReason,
   InvalidRequestReason,
+  Verification,
+  VerificationInput,
   type LLMClientShape,
   type LLMRequest,
 } from "@nexus-ai/llm"
@@ -248,6 +250,18 @@ const execution = Layer.effect(
       resume: coordinator.run,
       wake: coordinator.wake,
       interrupt: coordinator.interrupt,
+      verify: (request) =>
+        Verification.verifyCompletion(
+          new VerificationInput({
+            exitCode: request.exitCode,
+            missingFiles: [],
+            testsAttempted: request.testsAttempted,
+            testsPassed: request.testsPassed,
+            testOutput: request.testOutput,
+            unresolvedErrors: request.unresolvedErrors,
+            evidence: request.evidence,
+          }),
+        ),
     })
   }),
 ).pipe(Layer.provide(runnerLayer))

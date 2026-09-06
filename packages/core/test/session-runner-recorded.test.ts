@@ -19,6 +19,7 @@ import { Snapshot } from "@nexus-ai/core/snapshot"
 import { Prompt } from "@nexus-ai/core/session/prompt"
 import { SessionProjector } from "@nexus-ai/core/session/projector"
 import { SessionExecution } from "@nexus-ai/core/session/execution"
+import { Verification, VerificationInput } from "@nexus-ai/llm"
 import { SessionRunCoordinator } from "@nexus-ai/core/session/run-coordinator"
 import { SessionRunner } from "@nexus-ai/core/session/runner"
 import * as SessionRunnerLLM from "@nexus-ai/core/session/runner/llm"
@@ -96,6 +97,18 @@ const execution = Layer.effect(
       resume: coordinator.run,
       wake: coordinator.wake,
       interrupt: coordinator.interrupt,
+      verify: (request) =>
+        Verification.verifyCompletion(
+          new VerificationInput({
+            exitCode: request.exitCode,
+            missingFiles: [],
+            testsAttempted: request.testsAttempted,
+            testsPassed: request.testsPassed,
+            testOutput: request.testOutput,
+            unresolvedErrors: request.unresolvedErrors,
+            evidence: request.evidence,
+          }),
+        ),
     })
   }),
 ).pipe(Layer.provide(runnerLayer))

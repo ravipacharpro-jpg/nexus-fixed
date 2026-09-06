@@ -1,10 +1,11 @@
 export * as SessionExecution from "./execution"
 
-import { Context, Effect, Layer } from "effect"
+import { Context, Effect, FileSystem, Layer } from "effect"
 import { LayerNode } from "../effect/layer-node"
 import { Node } from "../effect/app-node"
 import { SessionRunner } from "./runner/index"
 import { SessionSchema } from "./schema"
+import { SessionVerification } from "./verification"
 
 export interface Interface {
   /** Snapshots active execution owned by this process. */
@@ -15,6 +16,14 @@ export interface Interface {
   readonly wake: (sessionID: SessionSchema.ID) => Effect.Effect<void>
   /** Interrupt active work owned by this process. Idle interruption is a no-op. */
   readonly interrupt: (sessionID: SessionSchema.ID) => Effect.Effect<void>
+  /**
+   * Evaluate the minimum success contract for a completed task.
+   * Never throws: returns a VerificationResult callers must check
+   * before claiming success.
+   */
+  readonly verify: (
+    request: typeof SessionVerification.Request.Type,
+  ) => Effect.Effect<SessionVerification.Result, never, FileSystem.FileSystem>
 }
 
 /** Routes execution from a Session ID to the runner owned by that Session's Location. */
@@ -30,5 +39,6 @@ export const noopLayer = Layer.succeed(
     resume: () => Effect.void,
     wake: () => Effect.void,
     interrupt: () => Effect.void,
+    verify: (request) => SessionVerification.verifyCompletion(request),
   }),
 )

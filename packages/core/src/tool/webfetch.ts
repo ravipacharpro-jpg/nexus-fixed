@@ -12,6 +12,10 @@ import { collectBoundedResponseBody } from "./http-body"
 import { ToolRegistry } from "./registry"
 import { Tool } from "./tool"
 import { Tools } from "./tools"
+import { detectContentGate, extractTitleFromHTML, gateWarning } from "./web-evidence"
+
+export { detectContentGate, extractTitleFromHTML, gateWarning }
+export type { ContentGate } from "./web-evidence"
 
 export const name = "webfetch"
 export const MAX_RESPONSE_BYTES = 5 * 1024 * 1024
@@ -20,7 +24,7 @@ export const MAX_TIMEOUT_SECONDS = 120
 
 export const description = `Fetch content from an HTTP or HTTPS URL and return it as text, markdown, or HTML. Markdown is the default.
 
-Use a more targeted tool when one is available. This tool is read-only. Large text results may be replaced with a preview while the complete output is retained in managed storage.`
+Use a more targeted tool when one is available. This tool is read-only. Large text results may be replaced with a preview while the complete output is retained in managed storage. Results include the page title, HTTP status, and a content-gate flag (login/captcha/paywall/empty). Never present gated or empty content as the page's information; login, OTP, CAPTCHA, and payment walls require the user, not another fetch.`
 
 const Timeout = Schema.Number.check(Schema.isGreaterThan(0), Schema.isLessThanOrEqualTo(MAX_TIMEOUT_SECONDS))
 
@@ -39,6 +43,12 @@ const Output = Schema.Struct({
   contentType: Schema.String,
   format: Input.fields.format,
   output: Schema.String,
+  status: Schema.Number.annotate({ description: "HTTP status of the fetched response" }),
+  title: Schema.optional(Schema.String).annotate({ description: "HTML page title when present" }),
+  gate: Schema.optional(Schema.Literals(["login", "captcha", "paywall", "empty"])).annotate({
+    description:
+      "Content gate detected in the response: login/captcha/paywall walls or empty content. Gated content is not page evidence.",
+  }),
 })
 
 type Format = (typeof Input.Type)["format"]
@@ -127,7 +137,9 @@ const layer = Layer.effectDiscard(
           description,
           input: Input,
           output: Output,
-          toModelOutput: ({ output }) => [{ type: "text", text: output.output }],
+          toModelOutput: ({ output }) => [
+            { type: "text", text: output.gate ? `${gateWarning(output)}\n\n${output.output}` : output.output },
+          ],
           execute: (input, context) =>
             Effect.gen(function* () {
               yield* Effect.try({
@@ -145,7 +157,7 @@ const layer = Layer.effectDiscard(
                 source: { type: "tool", messageID: context.assistantMessageID, callID: context.toolCallID },
               })
 
-              const { body, contentType } = yield* Effect.gen(function* () {
+              const { body, contentType, status } = yield* Effect.gen(function* () {
                 const response = yield* execute(http, input.url, input.format).pipe(
                   Effect.catchIf(isCloudflareChallenge, () => execute(http, input.url, input.format, "nexus")),
                 )
@@ -155,7 +167,7 @@ const layer = Layer.effectDiscard(
                   return yield* Effect.fail(new Error(`Unsupported fetched image content type: ${mime}`))
                 if (!isTextualMime(mime))
                   return yield* Effect.fail(new Error(`Unsupported fetched file content type: ${mime}`))
-                return { body: yield* collectBody(response), contentType }
+                return { body: yield* collectBody(response), contentType, status: response.status }
               }).pipe(
                 Effect.timeoutOrElse({
                   duration: Duration.seconds(input.timeout ?? DEFAULT_TIMEOUT_SECONDS),
@@ -167,11 +179,16 @@ const layer = Layer.effectDiscard(
                 try: () => convert(content, contentType, input.format),
                 catch: (error) => error,
               })
+              const title = contentType.includes("text/html") ? extractTitleFromHTML(content) : undefined
+              const gate = detectContentGate(output)
               return {
                 url: input.url,
                 contentType,
                 format: input.format,
                 output,
+                status,
+                ...(title ? { title } : {}),
+                ...(gate ? { gate } : {}),
               }
             }).pipe(Effect.mapError(() => new ToolFailure({ message: `Unable to fetch ${input.url}` }))),
         }),

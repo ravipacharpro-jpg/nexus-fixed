@@ -18,6 +18,7 @@ import type { Agent } from "@/agent/agent"
 import { Permission } from "@/permission"
 import { Skill } from "@/skill"
 import { AbsolutePath } from "@nexus-ai/core/schema"
+import { ExecutionRules } from "@nexus-ai/core/session/orchestrator/rules"
 import { Location } from "@nexus-ai/core/location"
 import { LocationServiceMap, locationServiceMapLayer } from "@nexus-ai/core/location-services"
 import { Reference } from "@nexus-ai/core/reference"
@@ -100,6 +101,9 @@ const layer = Layer.effect(
                   ]),
                 "</available_references>",
               ].join("\n"),
+          // Strict execution rules ride every session prompt so the model
+          // plans, verifies, and repairs by default instead of by luck.
+          ExecutionRules.formatRulesSection(),
         ].filter((part): part is string => part !== undefined)
       }),
 

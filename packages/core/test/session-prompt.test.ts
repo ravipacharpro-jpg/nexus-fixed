@@ -15,6 +15,7 @@ import { Prompt } from "@nexus-ai/core/session/prompt"
 import { SessionMessage } from "@nexus-ai/core/session/message"
 import { SessionProjector } from "@nexus-ai/core/session/projector"
 import { SessionExecution } from "@nexus-ai/core/session/execution"
+import { Verification, VerificationInput } from "@nexus-ai/llm"
 import { SessionInput } from "@nexus-ai/core/session/input"
 import { SessionInputTable, SessionMessageTable, SessionTable } from "@nexus-ai/core/session/sql"
 import { SessionStore } from "@nexus-ai/core/session/store"
@@ -40,6 +41,18 @@ const execution = Layer.succeed(
       Effect.sync(() => {
         wakeCalls.push(sessionID)
       }),
+    verify: (request) =>
+      Verification.verifyCompletion(
+        new VerificationInput({
+          exitCode: request.exitCode,
+          missingFiles: [],
+          testsAttempted: request.testsAttempted,
+          testsPassed: request.testsPassed,
+          testOutput: request.testOutput,
+          unresolvedErrors: request.unresolvedErrors,
+          evidence: request.evidence,
+        }),
+      ),
   }),
 )
 const it = testEffect(

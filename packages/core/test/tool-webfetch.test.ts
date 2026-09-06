@@ -73,6 +73,7 @@ describe("WebFetchTool helpers", () => {
     expect(WebFetchTool.extractTextFromHTML(html)).toBe("Helloworld wide")
     expect(WebFetchTool.convertHTMLToMarkdown(html)).toBe("# Hello\n\nworld **wide**")
   })
+
 })
 
 describe("WebFetchTool registration", () => {
@@ -86,7 +87,7 @@ describe("WebFetchTool registration", () => {
       expect(yield* settleTool(registry, call({ url, format: "text", timeout: 4 }))).toEqual({
         result: { type: "text", value: "hello" },
         output: {
-          structured: { url, contentType: "text/plain", format: "text", output: "hello" },
+          structured: { url, contentType: "text/plain", format: "text", output: "hello", status: 200 },
           content: [{ type: "text", text: "hello" }],
         },
       })
@@ -261,6 +262,65 @@ describe("WebFetchTool registration", () => {
       expect(requests).toHaveLength(2)
       expect(requests[0]?.headers["user-agent"]).toContain("Mozilla/5.0")
       expect(requests[1]?.headers["user-agent"]).toBe("nexus")
+    }),
+  )
+
+  it.effect("returns title, status, and gate evidence for HTML pages", () =>
+    Effect.gen(function* () {
+      reset()
+      respond = () =>
+        Effect.succeed(
+          new Response(
+            "<html><head><title>Secret Docs</title></head><body><h1>Docs</h1><p>Please log in to continue.</p></body></html>",
+            { headers: { "content-type": "text/html" } },
+          ),
+        )
+      const registry = yield* ToolRegistry.Service
+      const url = "https://1.1.1.1/walled"
+
+      const settlement = yield* settleTool(registry, call({ url, format: "text" }))
+      expect(settlement.result).toMatchObject({ type: "text" })
+      if (settlement.result.type !== "text") return
+      expect(settlement.result.value).toContain("requires login")
+      expect(settlement.result.value).toContain("Secret Docs")
+      expect(settlement.output?.structured).toMatchObject({
+        url,
+        status: 200,
+        title: "Secret Docs",
+        gate: "login",
+      })
+    }),
+  )
+
+  it.effect("flags bot challenges instead of presenting them as page content", () =>
+    Effect.gen(function* () {
+      reset()
+      respond = () =>
+        Effect.succeed(
+          new Response("<html><body>Just a moment... verifying you are human.</body></html>", {
+            headers: { "content-type": "text/html" },
+          }),
+        )
+      const registry = yield* ToolRegistry.Service
+
+      expect(yield* executeTool(registry, call({ url: "https://1.1.1.1/challenge", format: "text" }))).toMatchObject({
+        type: "text",
+      })
+      const settlement = yield* settleTool(registry, call({ url: "https://1.1.1.1/challenge", format: "text" }))
+      expect(settlement.output?.structured).toMatchObject({ gate: "captcha", status: 200 })
+    }),
+  )
+
+  it.effect("flags empty bodies as unread instead of successful reads", () =>
+    Effect.gen(function* () {
+      reset()
+      respond = () => Effect.succeed(new Response("   ", { headers: { "content-type": "text/plain" } }))
+      const registry = yield* ToolRegistry.Service
+
+      const settlement = yield* settleTool(registry, call({ url: "https://1.1.1.1/empty", format: "text" }))
+      if (settlement.result.type !== "text") throw new Error("expected a text result")
+      expect(settlement.result.value).toContain("no readable content")
+      expect(settlement.output?.structured).toMatchObject({ gate: "empty", status: 200 })
     }),
   )
 

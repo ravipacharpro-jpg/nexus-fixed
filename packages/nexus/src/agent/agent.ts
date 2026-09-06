@@ -3,6 +3,7 @@ import { PermissionV1 } from "@nexus-ai/core/v1/permission"
 import { Config } from "@/config/config"
 import { serviceUse } from "@nexus-ai/core/effect/service-use"
 import { Provider } from "@/provider/provider"
+import { RotationEngine } from "@/provider/rotation"
 
 import { generateObject, streamObject, type ModelMessage } from "ai"
 import { Truncate } from "@/tool/truncate"
@@ -471,24 +472,49 @@ const layer = Layer.effect(
           ),
         } satisfies Parameters<typeof generateObject>[0]
 
-        if (isOpenaiOauth) {
-          return yield* Effect.promise(async () => {
-            const result = streamObject({
-              ...params,
-              providerOptions: ProviderTransform.providerOptions(resolved, {
-                instructions: system.join("\n"),
-                store: false,
-              }),
-              onError: () => {},
+        const attempt = (useOAuth: boolean) => {
+          if (useOAuth) {
+            return Effect.promise(async () => {
+              const result = streamObject({
+                ...params,
+                providerOptions: ProviderTransform.providerOptions(resolved, {
+                  instructions: system.join("\n"),
+                  store: false,
+                }),
+                onError: () => {},
+              })
+              for await (const part of result.fullStream) {
+                if (part.type === "error") throw part.error
+              }
+              return result.object
             })
-            for await (const part of result.fullStream) {
-              if (part.type === "error") throw part.error
-            }
-            return result.object
-          })
+          }
+          return Effect.promise(() => generateObject(params).then((r) => r.object))
         }
 
-        return yield* Effect.promise(() => generateObject(params).then((r) => r.object))
+        // Single-model calls stall the task when the primary is down, so a
+        // fallbackable failure retries once with the first configured
+        // alternative model. Anything else rethrows the original error.
+        return yield* attempt(isOpenaiOauth).pipe(
+          Effect.catch((error) =>
+            Effect.gen(function* () {
+              if (!RotationEngine.isFallbackable(error)) return yield* Effect.fail(error)
+              const next = (yield* provider.fallbackModels(model.providerID))[0]
+              if (!next) return yield* Effect.fail(error)
+              yield* Effect.logWarning("agent generate failed; retrying with fallback model", {
+                fromProviderID: model.providerID,
+                fromModelID: model.modelID,
+                toProviderID: next.providerID,
+                toModelID: next.modelID,
+              })
+              const resolvedNext = yield* provider.getModel(next.providerID, next.modelID)
+              const languageNext = yield* provider.getLanguage(resolvedNext)
+              return yield* Effect.promise(() =>
+                generateObject({ ...params, model: languageNext }).then((r) => r.object),
+              )
+            }),
+          ),
+        )
       }),
     })
   }),

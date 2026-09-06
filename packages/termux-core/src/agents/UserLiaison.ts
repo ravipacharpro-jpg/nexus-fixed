@@ -2,13 +2,23 @@ import { execFile } from "node:child_process"
 import { mkdir, writeFile } from "node:fs/promises"
 import { join } from "node:path"
 import { promisify } from "node:util"
-import { SeniorDevAgent } from "./SeniorDevAgent"
+import { Planner } from "@nexus-ai/core/session/orchestrator/planner"
+import { SeniorDevAgent, type SeniorDevResult } from "./SeniorDevAgent"
 import { ManagerAgent, type ProjectResult, type TeamStatus } from "./TeamHierarchy"
+import { RepairTracker } from "./RepairTracker"
+import { unverifiedReport, verifyProjectResult, verifySeniorDevResult } from "./VerificationGate"
 import { SmartManager, TaskControlInterruption, type CapacityProbe, type TaskControlAction } from "./SmartManager"
 
 const execFileAsync = promisify(execFile)
 
 export type MessageType = "greeting" | "small_talk" | "status_check" | "small_task" | "big_task" | "command" | "help" | "complaint"
+
+export type RepairSummary = {
+  attempts: number
+  maxAttempts: number
+  lastError?: string
+  blocker?: string
+}
 
 export type TaskStatus = {
   taskId: string
@@ -20,6 +30,7 @@ export type TaskStatus = {
   updatedAt: number
   result?: ProjectResult
   error?: string
+  repair?: RepairSummary
 }
 
 export type LiaisonOptions = {
@@ -51,6 +62,7 @@ export class UserLiaison {
   private readonly activeTasks = new Map<string, TaskStatus>()
   private readonly seniorDev: SeniorDevAgent
   private readonly manager: ManagerAgent
+  private readonly repairs = new RepairTracker()
   private readonly options: LiaisonOptions
 
   constructor(options: LiaisonOptions = {}) {
@@ -92,10 +104,43 @@ export class UserLiaison {
 
   private async executeSmallTask(message: string, root: string, userId: string) {
     await this.emit({ taskId: "solo", userId, message, status: "Senior Dev analyzing", progress: 20, startedAt: Date.now(), updatedAt: Date.now() })
-    const result = /\b(review|analy[sz]e|scan|inspect)\b/i.test(message)
-      ? await this.seniorDev.analyze(root)
-      : await this.seniorDev.fix(root, { runTests: true })
-    return `Complete. ${result.summary}`
+    if (/\b(review|analy[sz]e|scan|inspect)\b/i.test(message)) {
+      const result = await this.seniorDev.analyze(root)
+      const gate = verifySeniorDevResult(result)
+      if (gate.success) return `Verified complete. ${result.summary}`
+      return `${unverifiedReport(gate)}. ${result.summary}`
+    }
+    const key = `small-fix:${userId}:${message.toLowerCase().replace(/[^a-z0-9]+/g, "-").slice(0, 60) || "task"}`
+    const maxAttempts = this.repairs.maxAttempts
+    const plan = Planner.createPlan({ goal: message, files: [root], steps: ["Apply safe automatic fixes"] })
+    const planShape = Planner.summarizePlan(plan)
+    // Inspect phase: read-only baseline before acting. Never edit blind.
+    const inspection = await this.seniorDev.analyze(root)
+    // Act phase: fix with tests, repaired on failure.
+    let result = await this.seniorDev.fix(root, { runTests: true })
+    for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+      // Verify phase: gate the act output before claiming anything.
+      const gate = verifySeniorDevResult(result)
+      if (gate.success) {
+        if (attempt > 1) this.repairs.reset(key)
+        const suffix = attempt > 1 ? ` (repaired on attempt ${attempt}/${maxAttempts})` : ""
+        return `Verified complete${suffix}. Plan: ${planShape}. Baseline: ${inspection.summary} Final: ${result.summary}`
+      }
+      const detail = testFailureDetail(result) ?? gate.reason ?? "unverified"
+      const rec = this.repairs.record(key, {
+        step: attempt === 1 ? "senior-dev fix" : "senior-dev test re-run",
+        error: detail,
+      })
+      if (!rec.canRetry) {
+        return `${this.repairs.summary(key)}. Plan: ${planShape}. Baseline: ${inspection.summary} Final: ${result.summary}`
+      }
+      // Repair attempt: fresh test run to rule out transient failure before
+      // reporting a blocker. An identical signature stops the loop via
+      // stagnant detection instead of repeating the same command unchanged.
+      const confirm = await this.seniorDev.tester.verify(root)
+      result = { ...result, tests: confirm }
+    }
+    return `${this.repairs.summary(key)}. Plan: ${planShape}. Baseline: ${inspection.summary} Final: ${result.summary}`
   }
 
   private async startBigTask(message: string, root: string, userId: string) {
@@ -127,7 +172,11 @@ export class UserLiaison {
             await this.emit(status)
           },
         })
-        const terminalStatus = result.status === "completed"
+        const gate = verifyProjectResult(result)
+        const verifiedComplete = result.status === "completed" && gate.success
+        const repairKey = `big:${userId}:${message.toLowerCase().replace(/[^a-z0-9]+/g, "-").slice(0, 60) || "task"}`
+        if (verifiedComplete) this.repairs.reset(repairKey)
+        const terminalStatus = verifiedComplete
           ? "Complete"
           : result.status === "paused"
             ? "Paused"
@@ -141,10 +190,37 @@ export class UserLiaison {
           updatedAt: Date.now(),
           result,
         }
+        if (result.status === "completed" && !gate.success) {
+          complete.error = unverifiedReport(gate)
+          const rec = this.repairs.record(repairKey, { step: "team verification", error: gate.reason ?? "unverified" })
+          complete.repair = {
+            attempts: rec.history.length,
+            maxAttempts: rec.maxAttempts,
+            lastError: gate.reason,
+            blocker: rec.canRetry ? undefined : this.repairs.summary(repairKey),
+          }
+        }
         await this.emit(complete)
         if (this.options.notify !== false) await this.notifyUser(`Task ${id}: ${complete.status}`)
       } catch (error) {
-        const failed: TaskStatus = { ...this.activeTasks.get(id) ?? initial, status: "Failed", progress: 100, updatedAt: Date.now(), error: error instanceof Error ? error.message : String(error) }
+        const messageText = error instanceof Error ? error.message : String(error)
+        const repairKey = `big:${userId}:${message.toLowerCase().replace(/[^a-z0-9]+/g, "-").slice(0, 60) || "task"}`
+        const rec = this.repairs.record(repairKey, { step: "team project", error: messageText })
+        const failed: TaskStatus = {
+          ...this.activeTasks.get(id) ?? initial,
+          status: "Failed",
+          progress: 100,
+          updatedAt: Date.now(),
+          error: rec.canRetry
+            ? `${messageText} (repair ${rec.attempt}/${rec.maxAttempts} recorded)`
+            : this.repairs.summary(repairKey),
+          repair: {
+            attempts: rec.history.length,
+            maxAttempts: rec.maxAttempts,
+            lastError: messageText,
+            blocker: rec.canRetry ? undefined : this.repairs.summary(repairKey),
+          },
+        }
         await this.emit(failed)
         if (this.options.notify !== false) await this.notifyUser(`Task ${id}: failed`)
       }
@@ -252,6 +328,17 @@ export class UserLiaison {
 
 function isTerminal(status: string) {
   return ["Complete", "Failed", "Cancelled"].includes(status)
+}
+
+/** Exact failing detail for the repair record: failing test command + first output line, or fix errors. */
+function testFailureDetail(result: SeniorDevResult): string | undefined {
+  const failed = result.fixes?.failed ?? []
+  if (!result.tests || result.tests.passed) {
+    if (failed.length === 0) return undefined
+    return failed.map((item) => item.error || `fix failed for ${item.bug.file}`).join("; ")
+  }
+  const firstLine = result.tests.output.split("\n").find((line) => line.trim().length > 0)?.trim() ?? "tests failed"
+  return `${result.tests.command ?? "tests"} :: ${firstLine.slice(0, 240)}`
 }
 
 export default UserLiaison
