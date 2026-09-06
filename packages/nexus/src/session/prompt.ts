@@ -1333,7 +1333,7 @@ const layer = Layer.effect(
         yield* sessions.setPermission({ sessionID: session.id, permission: permissions })
       }
 
-      return yield* Effect.gen(function* () {
+      const taskWork = Effect.gen(function* () {
         const objective = masterObjectiveText(input)
         if (input.agent === "master" && input.noReply !== true && isAutonomousMasterObjective(objective)) {
           return yield* dispatchMasterTask({ input, message })
@@ -1341,7 +1341,13 @@ const layer = Layer.effect(
         yield* checkpointMasterTask(input).pipe(Effect.ignore, Effect.forkIn(scope))
         if (input.noReply === true) return message
         return yield* loop({ sessionID: input.sessionID })
-      }).pipe(Effect.ensuring(skill.cleanupTask(taskSkillScope)))
+      })
+      return yield* taskWork.pipe(
+        Effect.matchCauseEffect({
+          onFailure: (cause) => skill.cleanupTask(taskSkillScope, true).pipe(Effect.andThen(Effect.failCause(cause))),
+          onSuccess: (value) => skill.cleanupTask(taskSkillScope).pipe(Effect.as(value)),
+        }),
+      )
     })
 
     const lastAssistant = Effect.fnUntraced(function* (sessionID: SessionID) {
