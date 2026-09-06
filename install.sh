@@ -224,11 +224,19 @@ else
         fi
     fi
 
-    filename="$APP-$target-${specific_version}$archive_ext"
-    url="https://github.com/$REPO/releases/download/v${specific_version}/$filename"
-    if ! curl -fsIL -o /dev/null "$url"; then
-        filename="$APP-$target$archive_ext"
+    # The fixed Termux release publishes the real ARM64 ELF as the direct
+    # `nexus` asset. Its small tarball contains only a launcher shell script,
+    # which expects a separate nexus.bin. Prefer the direct asset on Termux.
+    if [ "$is_termux" = "true" ] && curl -fsIL -o /dev/null "https://github.com/$REPO/releases/download/v${specific_version}/$APP"; then
+        filename="$APP"
         url="https://github.com/$REPO/releases/download/v${specific_version}/$filename"
+    else
+        filename="$APP-$target-${specific_version}$archive_ext"
+        url="https://github.com/$REPO/releases/download/v${specific_version}/$filename"
+        if ! curl -fsIL -o /dev/null "$url"; then
+            filename="$APP-$target$archive_ext"
+            url="https://github.com/$REPO/releases/download/v${specific_version}/$filename"
+        fi
     fi
 fi
 
@@ -395,24 +403,28 @@ download_and_install() {
         exit 1
     fi
 
+        local extracted_root="$tmp_dir"
+    local extracted_bin=""
     if [[ "$filename" == *.zip ]]; then
         unzip -q "$tmp_dir/$filename" -d "$tmp_dir/extracted"
-        local extracted_root="$tmp_dir/extracted"
-    else
+        extracted_root="$tmp_dir/extracted"
+    elif [[ "$filename" == *.tar.gz ]]; then
         tar -xzf "$tmp_dir/$filename" -C "$tmp_dir"
-        local extracted_root="$tmp_dir"
+    else
+        # Direct release assets (not archives) are already the executable.
+        extracted_bin="$tmp_dir/$filename"
     fi
-
-    # Release archives may contain a top-level directory, e.g.
-    # nexus-linux-arm64-0.1.67/nexus. Search only for the known executable
-    # names so unrelated archive contents can never be installed accidentally.
-    local extracted_bin=""
-    while IFS= read -r candidate; do
-        if [ -f "$candidate" ]; then
-            extracted_bin="$candidate"
-            break
-        fi
-    done < <(find "$extracted_root" -type f \( -name nexus -o -name nexus-x64 -o -name nexus-arm64 \) -print)
+    if [ -z "$extracted_bin" ]; then
+        # Release archives may contain a top-level directory, e.g.
+        # nexus-linux-arm64-0.1.67/nexus. Search only for known executable
+        # names so unrelated archive contents cannot be installed accidentally.
+        while IFS= read -r candidate; do
+            if [ -f "$candidate" ]; then
+                extracted_bin="$candidate"
+                break
+            fi
+        done < <(find "$extracted_root" -type f \( -name nexus -o -name nexus-x64 -o -name nexus-arm64 \) -print)
+    fi
     if [ -z "$extracted_bin" ]; then
         rm -rf "$tmp_dir"
         echo -e "${RED}Downloaded archive does not contain a nexus executable.${NC}"
