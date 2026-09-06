@@ -28,6 +28,14 @@ const browserLayer = Layer.succeed(
           catch: (error) => (error instanceof Error ? error : new Error(String(error))),
         })
       }),
+    launch: () => Effect.fail(new Error("not used in OAuth browser tests")),
+    navigate: () => Effect.fail(new Error("not used in OAuth browser tests")),
+    accessibilitySnapshot: () => Effect.fail(new Error("not used in OAuth browser tests")),
+    click: () => Effect.fail(new Error("not used in OAuth browser tests")),
+    fill: () => Effect.fail(new Error("not used in OAuth browser tests")),
+    type: () => Effect.fail(new Error("not used in OAuth browser tests")),
+    screenshot: () => Effect.fail(new Error("not used in OAuth browser tests")),
+    close: () => Effect.void,
   }),
 )
 
