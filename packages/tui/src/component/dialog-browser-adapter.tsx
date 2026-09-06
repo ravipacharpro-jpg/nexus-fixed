@@ -116,12 +116,16 @@ export function DialogBrowserAdapter() {
       footer={
         <Show
           when={currentMode()}
-          fallback={<span style={{ fg: theme.textMuted }}>Agent uses browser for web tasks. Pick a size, then run the script.</span>}
+          fallback={
+            <text fg={theme.textMuted}>
+              Agent uses browser for web tasks. Pick a size, then run the script.
+            </text>
+          }
         >
           {(mode) => (
-            <span style={{ fg: theme.success }}>
+            <text fg={theme.success}>
               Selected: {mode()} — run bash scripts/{scriptFor(mode() as BrowserMode)} to install.
-            </span>
+            </text>
           )}
         </Show>
       }
