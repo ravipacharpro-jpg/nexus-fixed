@@ -24,6 +24,7 @@ import { ModelV2 } from "@nexus-ai/core/model"
 import { isRecord } from "@/util/record"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { Config } from "@/config/config"
+import { McpBrowser } from "@/mcp/browser"
 
 const MCP_RESOURCE_TOOLS = {
   list: "list_mcp_resources",
@@ -389,6 +390,174 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
     })
   }
 
+  const addBrowserTool = (
+    key: string,
+    description: string,
+    schema: Record<string, unknown>,
+    execute: (args: Record<string, unknown>, browser: McpBrowser.Interface) => Effect.Effect<unknown, Error>,
+  ) => {
+    tools[key] = tool({
+      description,
+      inputSchema: jsonSchema(ProviderTransform.schema(input.model, schema)),
+      execute(args, opts) {
+        return run.promise(
+          Effect.gen(function* () {
+            const ctx = context(toRecord(args), opts)
+            yield* plugin.trigger(
+              "tool.execute.before",
+              { tool: key, sessionID: ctx.sessionID, callID: opts.toolCallId },
+              { args },
+            )
+            yield* ctx.ask({
+              permission: "browser",
+              metadata: { action: key },
+              patterns: ["*"],
+              always: ["*"],
+            })
+            const result = yield* execute(toRecord(args), yield* McpBrowser.Service)
+            const output = browserToolOutput(key, result)
+            yield* plugin.trigger(
+              "tool.execute.after",
+              { tool: key, sessionID: ctx.sessionID, callID: opts.toolCallId, args },
+              output,
+            )
+            if (opts.abortSignal?.aborted) {
+              yield* input.processor.completeToolCall(opts.toolCallId, output)
+            }
+            return output
+          }),
+        )
+      },
+    })
+  }
+
+  addBrowserTool(
+    "browser_launch",
+    "Launch a browser session. The session can then be navigated and controlled with the other browser tools.",
+    {
+      type: "object",
+      properties: {
+        id: { type: "string", description: "Optional stable session identifier; defaults to `default`." },
+        headless: {
+          type: "boolean",
+          description: "Whether to run without a visible browser window. Defaults to true.",
+        },
+        executablePath: { type: "string", description: "Optional path to a compatible Chromium or Chrome binary." },
+        channel: { type: "string", description: "Optional browser channel, such as `chrome`." },
+        args: { type: "array", items: { type: "string" }, description: "Optional Chromium launch arguments." },
+      },
+      additionalProperties: false,
+    },
+    (args, browser) => browser.launch(parseBrowserLaunchArgs(args)),
+  )
+  addBrowserTool(
+    "browser_navigate",
+    "Navigate a browser session to an HTTP or HTTPS URL and return its final URL, status, and title.",
+    {
+      type: "object",
+      properties: {
+        id: { type: "string", description: "Browser session identifier." },
+        url: { type: "string", description: "HTTP or HTTPS URL to open." },
+      },
+      required: ["id", "url"],
+      additionalProperties: false,
+    },
+    (args, browser) => browser.navigate(requiredString(args, "id"), requiredString(args, "url")),
+  )
+  addBrowserTool(
+    "browser_snapshot",
+    "Return the current page accessibility snapshot for a browser session.",
+    {
+      type: "object",
+      properties: { id: { type: "string", description: "Browser session identifier." } },
+      required: ["id"],
+      additionalProperties: false,
+    },
+    (args, browser) => browser.accessibilitySnapshot(requiredString(args, "id")),
+  )
+  addBrowserTool(
+    "browser_click",
+    "Click a safe, non-sensitive element in the current page using a CSS selector, role, or visible text target.",
+    {
+      type: "object",
+      properties: {
+        id: { type: "string", description: "Browser session identifier." },
+        target: browserLocatorSchema(),
+      },
+      required: ["id", "target"],
+      additionalProperties: false,
+    },
+    (args, browser) =>
+      browser
+        .click(requiredString(args, "id"), requiredBrowserLocator(args, "target"))
+        .pipe(Effect.as({ ok: true, action: "click" })),
+  )
+  addBrowserTool(
+    "browser_fill",
+    "Fill a safe, non-sensitive form field in the current page using a CSS selector, role, or visible text target.",
+    {
+      type: "object",
+      properties: {
+        id: { type: "string", description: "Browser session identifier." },
+        target: browserLocatorSchema(),
+        value: { type: "string", description: "Text to place in the field." },
+      },
+      required: ["id", "target", "value"],
+      additionalProperties: false,
+    },
+    (args, browser) =>
+      browser
+        .fill(requiredString(args, "id"), requiredBrowserLocator(args, "target"), requiredString(args, "value"))
+        .pipe(Effect.as({ ok: true, action: "fill" })),
+  )
+  addBrowserTool(
+    "browser_type",
+    "Type into a safe, non-sensitive field in the current page using a CSS selector, role, or visible text target.",
+    {
+      type: "object",
+      properties: {
+        id: { type: "string", description: "Browser session identifier." },
+        target: browserLocatorSchema(),
+        value: { type: "string", description: "Text to type into the field." },
+      },
+      required: ["id", "target", "value"],
+      additionalProperties: false,
+    },
+    (args, browser) =>
+      browser
+        .type(requiredString(args, "id"), requiredBrowserLocator(args, "target"), requiredString(args, "value"))
+        .pipe(Effect.as({ ok: true, action: "type" })),
+  )
+  addBrowserTool(
+    "browser_screenshot",
+    "Capture a screenshot of the current browser page and return metadata for the saved image.",
+    {
+      type: "object",
+      properties: {
+        id: { type: "string", description: "Browser session identifier." },
+        path: { type: "string", description: "Optional output path for the screenshot." },
+        type: { type: "string", enum: ["png", "jpeg"], description: "Image format; defaults to png." },
+        fullPage: { type: "boolean", description: "Capture the full scrollable page instead of the viewport." },
+      },
+      required: ["id"],
+      additionalProperties: false,
+    },
+    (args, browser) => browser.screenshot(requiredString(args, "id"), parseBrowserScreenshotArgs(args)),
+  )
+  addBrowserTool(
+    "browser_close",
+    "Close a browser session, or all browser sessions when no session identifier is provided.",
+    {
+      type: "object",
+      properties: { id: { type: "string", description: "Optional browser session identifier." } },
+      additionalProperties: false,
+    },
+    (args, browser) =>
+      browser
+        .close(optionalString(args, "id"))
+        .pipe(Effect.as({ ok: true, closed: optionalString(args, "id") ?? "all" })),
+  )
+
   if (flags.experimentalCodeMode) return tools
 
   for (const [key, entry] of Object.entries(yield* mcp.tools())) {
@@ -499,6 +668,89 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
 function toRecord(value: unknown) {
   if (isRecord(value)) return value
   return {}
+}
+
+function browserToolOutput(tool: string, result: unknown) {
+  const output = typeof result === "string" ? result : JSON.stringify(result ?? { ok: true }, null, 2)
+  return {
+    title: tool,
+    metadata: { tool, result },
+    output: output ?? String(result),
+  }
+}
+
+function browserLocatorSchema() {
+  return {
+    description: "Element target: a CSS selector string, or an object with role, text, or selector.",
+    anyOf: [
+      { type: "string" },
+      {
+        type: "object",
+        properties: {
+          role: { type: "string" },
+          name: { type: "string" },
+          text: { type: "string" },
+          selector: { type: "string" },
+          exact: { type: "boolean" },
+        },
+        additionalProperties: false,
+      },
+    ],
+  }
+}
+
+function requiredBrowserLocator(args: Record<string, unknown>, key: string): McpBrowser.LocatorTarget {
+  const raw = args[key]
+  if (typeof raw === "string" && raw.length > 0) return raw
+  if (!isRecord(raw)) throw new Error(`${key} must be a CSS selector string or locator object`)
+  const value = toRecord(raw)
+  const target: McpBrowser.LocatorTarget = {
+    ...(typeof value.role === "string" ? { role: value.role } : {}),
+    ...(typeof value.name === "string" ? { name: value.name } : {}),
+    ...(typeof value.text === "string" ? { text: value.text } : {}),
+    ...(typeof value.selector === "string" ? { selector: value.selector } : {}),
+    ...(typeof value.exact === "boolean" ? { exact: value.exact } : {}),
+  }
+  if (!target.role && !target.text && !target.selector) {
+    throw new Error(`${key} must include role, text, or selector`)
+  }
+  return target
+}
+
+function parseBrowserLaunchArgs(args: Record<string, unknown>): McpBrowser.LaunchOptions {
+  const launch: McpBrowser.LaunchOptions = {}
+  const id = optionalString(args, "id")
+  const executablePath = optionalString(args, "executablePath")
+  const channel = optionalString(args, "channel")
+  if (id !== undefined) Object.assign(launch, { id })
+  if (executablePath !== undefined) Object.assign(launch, { executablePath })
+  if (channel !== undefined) Object.assign(launch, { channel })
+  if (args.headless !== undefined) {
+    if (typeof args.headless !== "boolean") throw new Error("headless must be a boolean")
+    Object.assign(launch, { headless: args.headless })
+  }
+  if (args.args !== undefined) {
+    if (!Array.isArray(args.args) || args.args.some((item) => typeof item !== "string")) {
+      throw new Error("args must be an array of strings")
+    }
+    Object.assign(launch, { args: args.args })
+  }
+  return launch
+}
+
+function parseBrowserScreenshotArgs(args: Record<string, unknown>): McpBrowser.ScreenshotOptions {
+  const options: McpBrowser.ScreenshotOptions = {}
+  const path = optionalString(args, "path")
+  if (path !== undefined) Object.assign(options, { path })
+  if (args.type !== undefined) {
+    if (args.type !== "png" && args.type !== "jpeg") throw new Error("type must be png or jpeg")
+    Object.assign(options, { type: args.type })
+  }
+  if (args.fullPage !== undefined) {
+    if (typeof args.fullPage !== "boolean") throw new Error("fullPage must be a boolean")
+    Object.assign(options, { fullPage: args.fullPage })
+  }
+  return options
 }
 
 function parseListMcpResourcesArgs(value: unknown) {
