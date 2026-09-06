@@ -63,6 +63,7 @@ import { SessionTable } from "@nexus-ai/core/session/sql"
 import { SessionReminders } from "./reminders"
 import { SessionTools } from "./tools"
 import { LLMEvent } from "@nexus-ai/llm"
+import { McpBrowser } from "@/mcp/browser"
 
 // @ts-ignore
 globalThis.AI_SDK_LOG_WARNINGS = false
@@ -1516,6 +1517,7 @@ const layer = Layer.effect(
               Effect.provideService(Permission.Service, permission),
               Effect.provideService(ToolRegistry.Service, registry),
               Effect.provideService(MCP.Service, mcp),
+              Effect.provideService(McpBrowser.Service, yield* McpBrowser.Service),
               Effect.provideService(Truncate.Service, truncate),
               Effect.provideService(RuntimeFlags.Service, flags),
             )
@@ -1891,6 +1893,7 @@ export const node = LayerNode.make({
     Permission.node,
     FSUtil.node,
     MCP.node,
+    McpBrowser.node,
     LSP.node,
     ToolRegistry.node,
     Truncate.node,
