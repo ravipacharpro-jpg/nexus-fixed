@@ -31,8 +31,8 @@ mkdir -p "$INSTALL_DIR"
 echo "Downloading NEXUS $(basename "$url")..."
 curl -fL --retry 3 --proto '=https' --tlsv1.2 "$url" -o "$TMP/nexus.tar.gz"
 tar -xzf "$TMP/nexus.tar.gz" -C "$TMP"
-binary="$(find "$TMP" -type f -path '*/bin/nexus' -print -quit)"
-[ -n "$binary" ] || { echo "Release archive did not contain bin/nexus" >&2; exit 1; }
+binary="$(find "$TMP" -type f -name nexus -print -quit)"
+[ -n "$binary" ] || { echo "Release archive did not contain a nexus binary" >&2; exit 1; }
 chmod 0755 "$binary"
 "$binary" --version >/dev/null 2>&1 || { echo "Downloaded NEXUS binary failed its version check" >&2; exit 1; }
 
