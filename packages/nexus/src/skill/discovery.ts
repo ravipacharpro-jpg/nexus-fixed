@@ -21,7 +21,7 @@ class Index extends Schema.Class<Index>("Index")({
 }) {}
 
 export interface Interface {
-  readonly pull: (url: string) => Effect.Effect<string[]>
+  readonly pull: (url: string, options?: { root?: string }) => Effect.Effect<string[]>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@nexus/SkillDiscovery") {}
@@ -46,7 +46,7 @@ const layer: Layer.Layer<Service, never, FSUtil.Service | Path.Path | HttpClient
       )
     })
 
-    const pull = Effect.fn("Discovery.pull")(function* (url: string) {
+    const pull = Effect.fn("Discovery.pull")(function* (url: string, options?: { root?: string }) {
       const base = url.endsWith("/") ? url : `${url}/`
       const index = new URL("index.json", base).href
       const host = base.slice(0, -1)
@@ -76,7 +76,7 @@ const layer: Layer.Layer<Service, never, FSUtil.Service | Path.Path | HttpClient
         list,
         (skill) =>
           Effect.gen(function* () {
-            const root = path.join(cache, skill.name)
+            const root = path.join(options?.root ?? cache, skill.name)
             const versionFile = path.join(root, ".nexus-version")
             const version = skill.version
             const current =

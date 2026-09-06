@@ -13,6 +13,12 @@ describe("API vault provider validation contracts", () => {
     expect(PROVIDER_CONTRACTS.omniroute.curatedModels?.map((model) => model.id)).toEqual(["auto"])
   })
 
+  test("registers FreeLLMAPI as a keyed local OpenAI-compatible router", () => {
+    expect(PROVIDER_CONTRACTS.freellmapi.baseURL).toBe("http://127.0.0.1:3001/v1")
+    expect(PROVIDER_CONTRACTS.freellmapi.env).toEqual(["FREELLMAPI_API_KEY"])
+    expect(PROVIDER_CONTRACTS.freellmapi.curatedModels?.map((model) => model.id)).toEqual(["auto"])
+  })
+
   test("maps provider authentication and quota failures to usable vault statuses", () => {
     expect(validationStatusForResponse(PROVIDER_CONTRACTS.xai, 400)).toBe("invalid")
     expect(validationStatusForResponse(PROVIDER_CONTRACTS.perplexity, 401)).toBe("invalid")

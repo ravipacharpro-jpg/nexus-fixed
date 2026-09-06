@@ -121,6 +121,7 @@ describe("preferred defaults", () => {
     const { PREFERRED_MODELS } = await import("@/provider/rotation")
 
     expect(PREFERRED_MODELS.omniroute).toEqual(["auto"])
+    expect(PREFERRED_MODELS.freellmapi).toEqual(["auto"])
     expect(PREFERRED_MODELS.groq).toContain("openai/gpt-oss-120b")
     expect(PREFERRED_MODELS.groq).not.toContain("llama-3.1-8b-instant")
     expect(PREFERRED_MODELS.google).toContain("gemini-3.6-flash")

@@ -151,6 +151,27 @@ export const PROVIDER_CONTRACTS: Record<string, ProviderContract> = {
       },
     ],
   },
+  freellmapi: {
+    id: "freellmapi",
+    label: "FreeLLMAPI (local router)",
+    aliases: ["free-llm-api", "free-llm"],
+    modelsEndpoint: "http://127.0.0.1:3001/v1/models",
+    auth: "bearer",
+    baseURL: "http://127.0.0.1:3001/v1",
+    npm: "@ai-sdk/openai-compatible",
+    env: ["FREELLMAPI_API_KEY"],
+    curatedModels: [
+      {
+        id: "auto",
+        name: "FreeLLMAPI Auto",
+        context: 128000,
+        output: 8192,
+        toolCall: true,
+        reasoning: false,
+        input: ["text", "image"],
+      },
+    ],
+  },
   anthropic: {
     id: "anthropic",
     label: "Anthropic (Claude)",

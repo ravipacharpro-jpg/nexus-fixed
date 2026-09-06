@@ -19,6 +19,7 @@ import { type Tool as AITool, tool, jsonSchema } from "ai"
 import type { JSONSchema7 } from "@ai-sdk/provider"
 import { SessionCompaction } from "./compaction"
 import { SystemPrompt } from "./system"
+import { Skill } from "../skill"
 import { Instruction } from "./instruction"
 import { Plugin } from "../plugin"
 import { MAX_STEPS_PROMPT } from "@nexus-ai/core/session/runner/max-steps"
@@ -196,6 +197,7 @@ const layer = Layer.effect(
     const revert = yield* SessionRevert.Service
     const summary = yield* SessionSummary.Service
     const sys = yield* SystemPrompt.Service
+    const skill = yield* Skill.Service
     const llm = yield* LLM.Service
     const events = yield* EventV2Bridge.Service
     const flags = yield* RuntimeFlags.Service
@@ -1314,6 +1316,14 @@ const layer = Layer.effect(
       const message = yield* createUserMessage(input)
       yield* sessions.touch(input.sessionID)
 
+      const taskText = input.parts
+        .map((part) => (part.type === "text" ? part.text : ""))
+        .filter((text) => text.length > 0)
+        .concat(input.arguments)
+        .join("\n")
+      const taskAgent = input.agent ? yield* agents.get(input.agent) : yield* agents.defaultInfo()
+      const taskSkillScope = yield* skill.prepareTask(taskText, taskAgent ?? undefined)
+
       const permissions: PermissionV1.Rule[] = []
       for (const [t, enabled] of Object.entries(input.tools ?? {})) {
         permissions.push({ permission: t, action: enabled ? "allow" : "deny", pattern: "*" })
@@ -1323,13 +1333,15 @@ const layer = Layer.effect(
         yield* sessions.setPermission({ sessionID: session.id, permission: permissions })
       }
 
-      const objective = masterObjectiveText(input)
-      if (input.agent === "master" && input.noReply !== true && isAutonomousMasterObjective(objective)) {
-        return yield* dispatchMasterTask({ input, message })
-      }
-      yield* checkpointMasterTask(input).pipe(Effect.ignore, Effect.forkIn(scope))
-      if (input.noReply === true) return message
-      return yield* loop({ sessionID: input.sessionID })
+      return yield* Effect.gen(function* () {
+        const objective = masterObjectiveText(input)
+        if (input.agent === "master" && input.noReply !== true && isAutonomousMasterObjective(objective)) {
+          return yield* dispatchMasterTask({ input, message })
+        }
+        yield* checkpointMasterTask(input).pipe(Effect.ignore, Effect.forkIn(scope))
+        if (input.noReply === true) return message
+        return yield* loop({ sessionID: input.sessionID })
+      }).pipe(Effect.ensuring(skill.cleanupTask(taskSkillScope)))
     })
 
     const lastAssistant = Effect.fnUntraced(function* (sessionID: SessionID) {
@@ -1883,6 +1895,7 @@ export const node = LayerNode.make({
     SessionRevert.node,
     SessionSummary.node,
     SystemPrompt.node,
+    Skill.node,
     LLM.node,
     EventV2Bridge.node,
     RuntimeFlags.node,
