@@ -34,3 +34,30 @@ export const collectFailedToolCalls = (
  * identically everywhere.
  */
 export const formatToolError = (tool: FailedToolCall): string => `${tool.name}: ${tool.message}`
+
+/**
+ * Unresolved failures within one drain window. A failed call counts unless
+ * it predates the drain (baseline ID) or a later call with the same tool
+ * name completed: a retried-and-recovered step is resolved, not a blocker.
+ * Same-name pairing is heuristic — one tool serves many purposes — but a
+ * later success is the only in-transcript signal that recovery happened.
+ */
+export const collectUnresolvedToolCalls = (
+  messages: ReadonlyArray<SessionMessage.Message>,
+  baselineIds: ReadonlySet<string> | ReadonlyArray<string>,
+): FailedToolCall[] => {
+  const baseline = baselineIds instanceof Set ? baselineIds : new Set(baselineIds)
+  const latest = new Map<string, FailedToolCall>()
+  for (const message of messages) {
+    if (message.type !== "assistant") continue
+    for (const part of message.content) {
+      if (part.type !== "tool" || baseline.has(part.id)) continue
+      if (part.state.status === "error") {
+        latest.set(part.name, { id: part.id, name: part.name, message: part.state.error.message })
+      } else if (part.state.status === "completed") {
+        latest.delete(part.name)
+      }
+    }
+  }
+  return [...latest.values()]
+}

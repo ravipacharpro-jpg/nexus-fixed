@@ -55,6 +55,7 @@ export const fromShell = (output: ShellLikeOutput): typeof ToolResult.Type => {
 export const toPhaseOutcome = (result: typeof ToolResult.Type): PhaseOutcome => ({
   exitCode: result.exitCode,
   evidence: result.evidence,
+  ...(result.filesChanged ? { filesChanged: [...result.filesChanged] } : {}),
   ...(result.error ? { error: result.error } : {}),
 })
 

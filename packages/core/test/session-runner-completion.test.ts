@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { Schema } from "effect"
 import { SessionMessage } from "@nexus-ai/core/session/message"
-import { collectFailedToolCalls, formatToolError } from "@nexus-ai/core/session/runner/completion"
+import { collectFailedToolCalls, collectUnresolvedToolCalls, formatToolError } from "@nexus-ai/core/session/runner/completion"
 
 const decode = Schema.decodeUnknownSync(SessionMessage.Message)
 
@@ -82,6 +82,33 @@ describe("RunnerCompletion.collectFailedToolCalls", () => {
 
   test("formats every failed call through the shared contract", () => {
     expect(formatToolError({ id: "c1", name: "bash", message: "exit 127" })).toBe("bash: exit 127")
+  })
+
+  test("forgives a failure recovered by a later call with the same name", () => {
+    const messages = [
+      assistant("msg_1", [tool("c1", "bash", { status: "error", message: "exit 127" })]),
+      assistant("msg_2", [tool("c2", "bash", { status: "completed" })]),
+    ]
+    expect(collectUnresolvedToolCalls(messages, new Set())).toEqual([])
+  })
+
+  test("keeps recurring failures even when the name appeared before", () => {
+    const messages = [
+      assistant("msg_1", [tool("c1", "bash", { status: "error", message: "old" })]),
+      assistant("msg_2", [tool("c2", "read", { status: "completed" })]),
+      assistant("msg_3", [tool("c3", "bash", { status: "error", message: "again" })]),
+    ]
+    expect(collectUnresolvedToolCalls(messages, new Set())).toEqual([
+      { id: "c3", name: "bash", message: "again" },
+    ])
+  })
+
+  test("excludes baselined failures but still sees new ones", () => {
+    const messages = [
+      assistant("msg_1", [tool("c1", "bash", { status: "error", message: "old" })]),
+      assistant("msg_2", [tool("c2", "bash", { status: "error", message: "new" })]),
+    ]
+    expect(collectUnresolvedToolCalls(messages, ["c1"])).toEqual([{ id: "c2", name: "bash", message: "new" }])
   })
 
   test("supports baseline filtering so pre-existing failures stay out", () => {

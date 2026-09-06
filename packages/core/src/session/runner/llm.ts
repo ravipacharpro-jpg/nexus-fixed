@@ -34,7 +34,7 @@ import { SessionSchema } from "../schema"
 import { SessionStore } from "../store"
 import { SessionVerification } from "../verification"
 import { RunCompletionUnverified, type RunError, Service } from "./index"
-import { collectFailedToolCalls, formatToolError } from "./completion"
+import { collectFailedToolCalls, collectUnresolvedToolCalls, formatToolError } from "./completion"
 import { SessionRunnerModel } from "./model"
 import { Config as CoreConfig } from "../../config"
 import { getDeviceConfig } from "../../device"
@@ -434,9 +434,7 @@ const layer = Layer.effect(
       // while tool errors it produced remain unresolved. Pre-existing
       // failures stay out via the baseline. Interrupts and defects escape
       // through runTurn above and never reach this gate.
-      const failed = collectFailedToolCalls(yield* getContext(input.sessionID)).filter(
-        (tool) => !baselineFailed.has(tool.id),
-      )
+      const failed = collectUnresolvedToolCalls(yield* getContext(input.sessionID), baselineFailed)
       const errors = failed.map(formatToolError)
       // FSUtil is a FileSystem: the gate takes no expected files here, but
       // the requirement rides the type so file-backed callers cannot drop it.

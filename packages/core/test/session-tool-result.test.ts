@@ -38,6 +38,14 @@ describe("ToolResult contract", () => {
     expect(outcome).toEqual({ exitCode: 0, evidence: "did it" })
   })
 
+  test("toPhaseOutcome carries changed files without aliasing", () => {
+    const files = ["a.ts"]
+    const outcome = toPhaseOutcome(new ToolResult({ success: true, filesChanged: files }))
+    expect(outcome.filesChanged).toEqual(["a.ts"])
+    files.push("b.ts")
+    expect(outcome.filesChanged).toEqual(["a.ts"])
+  })
+
   test("toTestCheck reports attempted and passed flags", () => {
     expect(toTestCheck(new ToolResult({ success: false, testsAttempted: true, testsPassed: false }))).toMatchObject({
       attempted: true,
