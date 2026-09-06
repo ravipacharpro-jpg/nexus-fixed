@@ -46,6 +46,24 @@
 
 ### Installation
 
+#### Termux (fixed browser-adapter release)
+
+Native Termux users do not need Bun or a source build. The easy installer downloads the latest fixed release, installs the required Termux/glibc runtime, and creates the `nexus` command:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/ravipacharpro-jpg/nexus-fixed/dev/install-termux-easy.sh | bash
+source ~/.bashrc
+nexus --version
+```
+
+To install a specific release, pass its version to the installer:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/ravipacharpro-jpg/nexus-fixed/dev/install-termux-easy.sh | bash -s -- --version 0.1.11
+```
+
+If an older source checkout exists in `~/nexus-fixed`, it can remain there; the Termux installer uses the prebuilt release and does not run `bun install`.
+
 ```bash
 # YOLO
 curl -fsSL https://github.com/itzgeniusboy/nexus/releases | bash
