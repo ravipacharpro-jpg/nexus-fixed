@@ -13,6 +13,7 @@ import {
   updateApiKeyStatus,
 } from "@/api/ApiVault"
 import {
+  configuredProviderKeys,
   isTextGenerationCandidate,
   modelForProvider,
   preferredModelForProvider,
@@ -98,6 +99,17 @@ describe("provider model selection", () => {
     }
 
     expect(modelForProvider("groq", models)).toBe("llama-3.1-8b-instant")
+  })
+})
+
+describe("provider key rotation", () => {
+  test("deduplicates repeated configured keys before rotation", () => {
+    expect(configuredProviderKeys({ groq: [" key-a ", "key-a", "key-b", "key-b"] }, "groq")).toEqual([
+      "key-a",
+      "key-b",
+    ])
+    const engine = new RotationEngine({ groq: ["key-a", "key-a", "key-b"] })
+    expect([engine.next("groq"), engine.next("groq"), engine.next("groq")]).toEqual(["key-a", "key-b", "key-a"])
   })
 })
 

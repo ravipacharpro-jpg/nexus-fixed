@@ -240,7 +240,7 @@ function keyValues(apiKeys: RotatingKeys, providerID: string): string[] {
 }
 
 export function configuredProviderKeys(apiKeys: RotatingKeys | undefined, providerID: string): string[] {
-  return keyValues(apiKeys ?? {}, providerID).filter((value) => value.trim().length > 0)
+  return [...new Set(keyValues(apiKeys ?? {}, providerID).map((value) => value.trim()).filter((value) => value.length > 0))]
 }
 
 export function normalizeProviderKeyName(key: string): string | undefined {
