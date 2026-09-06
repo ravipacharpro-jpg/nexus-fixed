@@ -3,6 +3,7 @@ export * as Verifier from "./verifier"
 import { Effect, FileSystem } from "effect"
 import { SessionVerification } from "../verification"
 import { Verification } from "@nexus-ai/llm"
+import { deriveContract, type SuccessContract } from "./contract"
 import { executePhase } from "./executor"
 import type { DescribeFailure, PhaseReport, StepRunner } from "./executor"
 import type { Phase, Plan } from "./planner"
@@ -57,6 +58,7 @@ export type PhaseVerification = {
 export type OrchestratedResult = {
   readonly success: boolean
   readonly plan: Plan
+  readonly contract: typeof SuccessContract.Type
   readonly phases: ReadonlyArray<PhaseVerification>
   readonly blocker: string | undefined
 }
@@ -74,6 +76,7 @@ export const runOrchestrated = Effect.fn("OrchestratorVerifier.runOrchestrated")
   readonly runner: StepRunner<E>
   readonly describe: DescribeFailure<E>
 }) {
+  const contract = deriveContract(input.plan)
   const phases: PhaseVerification[] = []
   for (const phase of input.plan.phases) {
     const report = yield* executePhase({ key: input.key, phase, runner: input.runner, describe: input.describe })
@@ -82,6 +85,7 @@ export const runOrchestrated = Effect.fn("OrchestratorVerifier.runOrchestrated")
       return {
         success: false,
         plan: input.plan,
+        contract,
         phases,
         blocker: report.blocker ?? `Phase "${phase.title}" could not be executed.`,
       } satisfies OrchestratedResult
@@ -98,6 +102,7 @@ export const runOrchestrated = Effect.fn("OrchestratorVerifier.runOrchestrated")
       return {
         success: false,
         plan: input.plan,
+        contract,
         phases,
         blocker:
           `Phase "${phase.title}" unverified: ${verification.reason ?? "unverified"}. ` +
@@ -105,5 +110,5 @@ export const runOrchestrated = Effect.fn("OrchestratorVerifier.runOrchestrated")
       } satisfies OrchestratedResult
     }
   }
-  return { success: true, plan: input.plan, phases, blocker: undefined } satisfies OrchestratedResult
+  return { success: true, plan: input.plan, contract, phases, blocker: undefined } satisfies OrchestratedResult
 })

@@ -3,6 +3,7 @@ export * as Executor from "./executor"
 import { Effect } from "effect"
 import { SessionRepair } from "../repair"
 import type { Phase, Plan } from "./planner"
+import { fromShell, toPhaseOutcome } from "./tool-result"
 
 /**
  * Phase outcome produced by a step runner. Runners close over their own
@@ -45,25 +46,12 @@ export type ShellLikeOutput = {
 
 /**
  * Standardized shell → phase-outcome mapping so every orchestrated shell
- * call feeds the verification gate uniformly: exit code preserved, output
- * as evidence, non-zero or timed-out runs as unresolved errors.
+ * call feeds the verification gate uniformly. Routes through the common
+ * ToolResult contract: exit code preserved, output as evidence, non-zero
+ * or timed-out runs as unresolved errors.
  */
 export function phaseOutcomeFromShell(output: ShellLikeOutput): PhaseOutcome {
-  if (output.timeout) {
-    return {
-      exitCode: 124,
-      evidence: output.output ?? "Command exceeded timeout.",
-      error: "Command exceeded timeout before completion.",
-    }
-  }
-  if (output.exit === undefined) {
-    return { evidence: output.output, error: "Shell result carried no exit code." }
-  }
-  return {
-    exitCode: output.exit,
-    evidence: output.output,
-    error: output.exit === 0 ? undefined : `Command exited with code ${output.exit}.`,
-  }
+  return toPhaseOutcome(fromShell(output))
 }
 
 export type ExecutionReport = {

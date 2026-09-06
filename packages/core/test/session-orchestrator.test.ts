@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test"
 import { Effect } from "effect"
 import { NodeFileSystem } from "@effect/platform-node"
 import { Planner } from "@nexus-ai/core/session/orchestrator/planner"
+import { deriveContract } from "@nexus-ai/core/session/orchestrator/contract"
 import { ExecutionRules } from "@nexus-ai/core/session/orchestrator/rules"
 import { executePlan, phaseOutcomeFromShell } from "@nexus-ai/core/session/orchestrator/executor"
 import { runOrchestrated } from "@nexus-ai/core/session/orchestrator/verifier"
@@ -69,6 +70,30 @@ describe("ExecutionRules", () => {
     for (const rule of ExecutionRules.RULES) {
       expect(section).toContain(rule.text)
     }
+  })
+})
+
+describe("SuccessContract.deriveContract", () => {
+  test("derives goal, deduped files, and evidence requirement from a plan", () => {
+    const plan = Planner.createPlan({ goal: "Ship", files: ["a.ts", "a.ts"], steps: ["Build"] })
+    const contract = deriveContract(plan)
+    expect(contract.goal).toBe("Ship")
+    expect(contract.expectedFiles).toEqual(["a.ts"])
+    expect(contract.evidenceRequired).toBe(true)
+  })
+
+  test("omits expectedFiles when the plan names none", () => {
+    const contract = deriveContract(Planner.createPlan({ goal: "Look" }))
+    expect(contract.expectedFiles).toBeUndefined()
+  })
+
+  test("accepts caller-declared requirements alongside derived facts", () => {
+    const contract = deriveContract(Planner.createPlan({ goal: "Ship", steps: ["Build"] }), {
+      requiredChanges: ["update changelog"],
+      destructiveAction: true,
+    })
+    expect(contract.requiredChanges).toEqual(["update changelog"])
+    expect(contract.destructiveAction).toBe(true)
   })
 })
 
@@ -147,6 +172,8 @@ describe("Verifier.runOrchestrated", () => {
     expect(result.blocker).toBeUndefined()
     expect(result.phases.length).toBe(3)
     for (const item of result.phases) expect(item.verified).toBe(true)
+    expect(result.contract.goal).toBe("Do")
+    expect(result.contract.evidenceRequired).toBe(true)
   })
 
   test("halts instead of building on a phase with missing expected files", async () => {
