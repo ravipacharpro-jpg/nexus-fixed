@@ -1,148 +1,165 @@
 <div align="center">
-<pre>
-       ◇      ◇      ◇
-       │      │      │
-   ╭──────┬──────┬──────╮
-   │ PLAN │ BUILD│ CHECK│
-   ╰──────┴──────┴──────╯
-        ◉  POWER CORE
-     NEXUS AGNET ...The Ultimate Powerhouse for Android Automation!
-</pre>
+
+# NEXUS
+
+**An autonomous coding assistant with a terminal UI, API server, and extensible agent runtime.**
+
+[![NEXUS Terminal UI](packages/web/src/assets/lander/screenshot.png)](https://github.com/ravipacharpro-jpg/Nexus-Agent)
+
 </div>
-<p align="center">
-  <a href="https://github.com/itzgeniusboy/nexus/discord"><img alt="Discord" src="https://img.shields.io/discord/1391832426048651334?style=flat-square&label=discord" /></a>
-  <a href="https://www.npmjs.com/package/nexus-ai"><img alt="npm" src="https://img.shields.io/npm/v/nexus-ai?style=flat-square" /></a>
-  <a href="https://github.com/itzgeniusboy/nexus/actions/workflows/publish.yml"><img alt="Build status" src="https://img.shields.io/github/actions/workflow/status/itzgeniusboy/nexus/publish.yml?style=flat-square&branch=dev" /></a>
-</p>
 
-<p align="center">
-  <a href="README.md">English</a> |
-  <a href="README.zh.md">简体中文</a> |
-  <a href="README.zht.md">繁體中文</a> |
-  <a href="README.ko.md">한국어</a> |
-  <a href="README.de.md">Deutsch</a> |
-  <a href="README.es.md">Español</a> |
-  <a href="README.fr.md">Français</a> |
-  <a href="README.it.md">Italiano</a> |
-  <a href="README.da.md">Dansk</a> |
-  <a href="README.ja.md">日本語</a> |
-  <a href="README.pl.md">Polski</a> |
-  <a href="README.ru.md">Русский</a> |
-  <a href="README.bs.md">Bosanski</a> |
-  <a href="README.ar.md">العربية</a> |
-  <a href="README.no.md">Norsk</a> |
-  <a href="README.br.md">Português (Brasil)</a> |
-  <a href="README.th.md">ไทย</a> |
-  <a href="README.tr.md">Türkçe</a> |
-  <a href="README.uk.md">Українська</a> |
-  <a href="README.bn.md">বাংলা</a> |
-  <a href="README.gr.md">Ελληνικά</a> |
-  <a href="README.vi.md">Tiếng Việt</a>
-</p>
+NEXUS is a Bun-based monorepo for an agentic development environment. It includes a terminal interface, a v2 CLI/API server, model and provider integrations, MCP support, project worktrees, and a web application.
 
-[![NEXUS Terminal UI](packages/web/src/assets/lander/screenshot.png)](https://github.com/itzgeniusboy/nexus)
+> **Project note:** This repository is maintained as `ravipacharpro-jpg/Nexus-Agent`. Some upstream links and translated README files may refer to a different NEXUS distribution; use the commands and links in this README for this repository.
+
+## Requirements
+
+- [Bun](https://bun.sh/) **1.3.14** or a compatible Bun 1.x release
+- Git
+- A configured model provider for using the assistant (see the provider and model documentation in `packages/web/src/content/docs`)
+
+## Quick start
+
+Clone the repository and install workspace dependencies:
+
+```bash
+git clone https://github.com/ravipacharpro-jpg/Nexus-Agent.git
+cd Nexus-Agent
+bun install
+```
+
+Start the development TUI:
+
+```bash
+bun dev
+```
+
+To start NEXUS in a particular project directory:
+
+```bash
+bun dev /path/to/project
+```
+
+The development entry point is `packages/nexus/src/index.ts`, and the default development command runs it with Bun's browser conditions enabled.
+
+## CLI commands
+
+The v2 CLI is currently a preview. From the repository root, use the development entry point while working from source:
+
+```bash
+bun dev --help
+```
+
+The published executable is named `nexus`:
+
+```bash
+nexus --help
+```
+
+| Command | Purpose |
+| --- | --- |
+| `nexus serve` | Start the v2 API server. |
+| `nexus serve --hostname 127.0.0.1 --port 4096` | Start the API server on a specific host and port. |
+| `nexus serve --register` | Start the API server and register it with the configured runtime. |
+| `nexus api <operation>` | Make an OpenAPI request to a running server. An HTTP method and path may also be supplied. |
+| `nexus api <operation> -d <body>` | Send a request body with an API request. |
+| `nexus api <operation> -H name:value` | Add a request header. Repeat the flag when needed. |
+| `nexus api <operation> --param key=value` | Supply an OpenAPI path or query parameter. |
+| `nexus service start` | Start the background server. |
+| `nexus service restart` | Restart the background server. |
+| `nexus service status` | Show background server status. |
+| `nexus service stop` | Stop the background server. |
+| `nexus service password [value]` | Get or set the background server password. |
+| `nexus debug agents` | List all available agents. |
+| `nexus migrate` | Migrate v1 data to v2. |
+
+For command-specific options, append `--help`, for example:
+
+```bash
+nexus serve --help
+nexus api --help
+nexus service --help
+```
+
+## Development commands
+
+The root `package.json` contains the following commonly used scripts:
+
+```bash
+bun dev                  # Start the TUI from the repository root
+bun dev /path/to/project  # Start the TUI in a specific project
+bun run dev:web          # Start the web application
+bun run dev:desktop      # Start the desktop application
+bun run dev:storybook    # Start Storybook
+bun run lint             # Run oxlint
+bun run typecheck        # Type-check the workspace
+bun run typecheck:lowmem # Type-check with one Turbo task at a time
+bun run test:lowmem      # Run the low-memory test script
+```
+
+The root `test` script intentionally exits with an explanatory message; run the relevant package tests or `bun run test:lowmem` instead.
+
+To work directly on the CLI package:
+
+```bash
+bun --cwd packages/cli run dev
+bun --cwd packages/cli run typecheck
+bun --cwd packages/cli run build
+```
+
+## Running the API server and web app
+
+Run the v2 API server from source:
+
+```bash
+bun dev serve
+```
+
+The server defaults to `127.0.0.1`; pass `--port` and `--hostname` to change the bind address:
+
+```bash
+bun dev serve --hostname 127.0.0.1 --port 4096
+```
+
+In a second terminal, run the web application:
+
+```bash
+bun run dev:web
+```
+
+The web app is served by the development tooling on the local URL printed in the terminal.
+
+## Repository layout
+
+| Path | Description |
+| --- | --- |
+| `packages/nexus` | Core runtime, TUI entry point, v2 CLI commands, server, storage, and agent logic. |
+| `packages/cli` | CLI framework and v2 command-line package. |
+| `packages/app` | Web application. |
+| `packages/desktop` | Desktop application wrapper. |
+| `packages/assistant` | Assistant and agent behavior. |
+| `packages/llm` | Provider and model integrations. |
+| `packages/protocol` | Shared protocol types. |
+| `docs` | Architecture, audit, runtime, and implementation notes. |
+| `specs` | v2 configuration, provider, session, tool, and storage specifications. |
+
+## Documentation
+
+- [Contributing guide](CONTRIBUTING.md)
+- [Agent instructions](AGENTS.md)
+- [Architecture documentation](docs/)
+- [v2 specifications](specs/v2/)
+- [Web application documentation](packages/web/README.md)
+- [CLI package](packages/cli/)
+
+## Contributing
+
+Before opening a pull request, read [CONTRIBUTING.md](CONTRIBUTING.md). Keep changes focused, run the relevant checks, and include reproduction or verification steps for behavior changes. Pull requests should reference an existing issue and use a conventional title such as `feat:`, `fix:`, or `docs:`.
+
+## License
+
+See the repository's license file and package-specific notices for applicable licensing information.
 
 ---
 
-### Installation
-
-#### Termux (fixed browser-adapter release)
-
-Native Termux users do not need Bun or a source build. The easy installer downloads the latest fixed release, installs the required Termux/glibc runtime, and creates the `nexus` command:
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/ravipacharpro-jpg/nexus-fixed/dev/install-termux-easy.sh | bash
-source ~/.bashrc
-nexus --version
-```
-
-To install a specific release, pass its version to the installer:
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/ravipacharpro-jpg/nexus-fixed/dev/install-termux-easy.sh | bash -s -- --version 0.1.11
-```
-
-If an older source checkout exists in `~/nexus-fixed`, it can remain there; the Termux installer uses the prebuilt release and does not run `bun install`.
-
-```bash
-# YOLO
-curl -fsSL https://github.com/itzgeniusboy/nexus/releases | bash
-
-# Package managers
-npm i -g nexus-ai@latest        # or bun/pnpm/yarn
-scoop install nexus             # Windows
-choco install nexus             # Windows
-brew install itzgeniusboy/nexus # macOS and Linux (recommended, always up to date)
-brew install nexus              # macOS and Linux (official brew formula, updated less)
-sudo pacman -S nexus            # Arch Linux (Stable)
-paru -S nexus-bin               # Arch Linux (Latest from AUR)
-mise use -g nexus               # Any OS
-nix run nixpkgs#nexus           # or github:itzgeniusboy/nexus for latest dev branch
-```
-
-> [!TIP]
-> Remove versions older than 0.1.x before installing.
-
-### Desktop App (BETA)
-
-NEXUS is also available as a desktop application. Download directly from the [releases page](https://github.com/itzgeniusboy/nexus/releases) or [nexus/download](https://github.com/itzgeniusboy/nexus/releases).
-
-| Platform              | Download                           |
-| --------------------- | ---------------------------------- |
-| macOS (Apple Silicon) | `nexus-desktop-mac-arm64.dmg`   |
-| macOS (Intel)         | `nexus-desktop-mac-x64.dmg`     |
-| Windows               | `nexus-desktop-windows-x64.exe` |
-| Linux                 | `.deb`, `.rpm`, or `.AppImage`     |
-
-```bash
-# macOS (Homebrew)
-brew install --cask nexus-desktop
-# Windows (Scoop)
-scoop bucket add extras; scoop install extras/nexus-desktop
-```
-
-#### Installation Directory
-
-The install script respects the following priority order for the installation path:
-
-1. `$NEXUS_INSTALL_DIR` - Custom installation directory
-2. `$XDG_BIN_DIR` - XDG Base Directory Specification compliant path
-3. `$HOME/bin` - Standard user binary directory (if it exists or can be created)
-4. `$HOME/.nexus/bin` - Default fallback
-
-```bash
-# Examples
-NEXUS_INSTALL_DIR=/usr/local/bin curl -fsSL https://github.com/itzgeniusboy/nexus/releases | bash
-XDG_BIN_DIR=$HOME/.local/bin curl -fsSL https://github.com/itzgeniusboy/nexus/releases | bash
-```
-
-### Agents
-
-NEXUS includes two built-in agents you can switch between with the `Tab` key.
-
-- **build** - Default, full-access agent for development work
-- **plan** - Read-only agent for analysis and code exploration
-  - Denies file edits by default
-  - Asks permission before running bash commands
-  - Ideal for exploring unfamiliar codebases or planning changes
-
-Also included is a **general** subagent for complex searches and multistep tasks.
-This is used internally and can be invoked using `@general` in messages.
-
-Learn more about [agents](https://github.com/itzgeniusboy/nexus#readme/agents).
-
-### Documentation
-
-For more info on how to configure NEXUS, [**head over to our docs**](https://github.com/itzgeniusboy/nexus#readme).
-
-### Contributing
-
-If you're interested in contributing to NEXUS, please read our [contributing docs](./CONTRIBUTING.md) before submitting a pull request.
-
-### Building on NEXUS
-
-If you are working on a project that's related to NEXUS and is using "nexus" as part of its name, for example "nexus-dashboard" or "nexus-mobile", please add a note to your README to clarify that it is not built by the NEXUS team and is not affiliated with us in any way.
-
----
-
-**Join our community** [Discord](https://github.com/itzgeniusboy/nexus) | [X.com](https://github.com/itzgeniusboy/nexus)
+**Repository:** [ravipacharpro-jpg/Nexus-Agent](https://github.com/ravipacharpro-jpg/Nexus-Agent)
