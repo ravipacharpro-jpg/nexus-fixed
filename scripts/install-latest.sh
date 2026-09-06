@@ -20,15 +20,15 @@ case "$(uname -m)" in
   *) echo "Unsupported CPU architecture: $(uname -m)" >&2; exit 1 ;;
 esac
 
-asset="nexus-${os}-${arch}.tar.gz"
-url="$(curl -fsSL "$API" | grep -o '"browser_download_url": "[^"]*'"${asset}"'"' | head -1 | sed 's/.*"\(https[^" ]*\)"/\1/')"
+asset_prefix="nexus-${os}-${arch}-"
+url="$(curl -fsSL "$API" | grep -o '"browser_download_url": "[^"]*'"${asset_prefix}"'[^"]*\.tar\.gz"' | head -1 | sed 's/.*"\(https[^" ]*\)"/\1/')"
 if [ -z "$url" ]; then
-  echo "Latest release does not contain ${asset}. Check https://github.com/${REPO}/releases/latest" >&2
+  echo "Latest release does not contain a ${asset_prefix}*.tar.gz asset. Check https://github.com/${REPO}/releases/latest" >&2
   exit 1
 fi
 
 mkdir -p "$INSTALL_DIR"
-echo "Downloading NEXUS ${asset}..."
+echo "Downloading NEXUS $(basename "$url")..."
 curl -fL --retry 3 --proto '=https' --tlsv1.2 "$url" -o "$TMP/nexus.tar.gz"
 tar -xzf "$TMP/nexus.tar.gz" -C "$TMP"
 binary="$(find "$TMP" -type f -path '*/bin/nexus' -print -quit)"
