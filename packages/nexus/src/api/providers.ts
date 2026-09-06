@@ -129,6 +129,28 @@ export const PROVIDER_CONTRACTS: Record<string, ProviderContract> = {
     npm: "@ai-sdk/openai-compatible",
     env: [],
   },
+  omniroute: {
+    id: "omniroute",
+    label: "OmniRoute (local gateway)",
+    aliases: ["omni-router", "omni"],
+    modelsEndpoint: "http://127.0.0.1:20128/v1/models",
+    modelsEndpointPublic: true,
+    auth: "bearer",
+    baseURL: "http://127.0.0.1:20128/v1",
+    npm: "@ai-sdk/openai-compatible",
+    env: [],
+    curatedModels: [
+      {
+        id: "auto",
+        name: "OmniRoute Auto",
+        context: 128000,
+        output: 8192,
+        toolCall: true,
+        reasoning: false,
+        input: ["text", "image"],
+      },
+    ],
+  },
   anthropic: {
     id: "anthropic",
     label: "Anthropic (Claude)",

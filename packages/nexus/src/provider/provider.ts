@@ -54,7 +54,7 @@ function hasUsableProviderCredential(
   provider: Pick<Info, "id" | "key" | "source">,
   apiKeys: Record<string, string[]>,
 ): boolean {
-  if (provider.id === "ollama" || provider.id === "opencode") return true
+  if (provider.id === "ollama" || provider.id === "opencode" || provider.id === "omniroute") return true
   if (provider.source === "env" || provider.source === "api") return true
   const keys = [...(provider.key ? [provider.key] : []), ...configuredProviderKeys(apiKeys, provider.id)]
   if (keys.length === 0) return false
@@ -386,6 +386,7 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
     // The upstream catalog still uses the historical provider ID; keep it as
     // an internal compatibility alias while exposing NEXUS in the UI.
     opencode: publicCatalog,
+    omniroute: publicCatalog,
     nexus: publicCatalog,
     openai: () =>
       Effect.succeed({
@@ -2303,7 +2304,13 @@ const layer = Layer.effect(
 
       const configured = Object.keys(cfg.provider ?? {})
       const candidates = Object.values(s.providers)
-        .filter((p) => configured.length === 0 || configured.includes(p.id) || p.id === "opencode")
+        .filter(
+          (p) =>
+            configured.length === 0 ||
+            configured.includes(p.id) ||
+            p.id === "opencode" ||
+            p.id === "omniroute",
+        )
         .filter((p) => !isDeprecatedFreeProvider(p.id))
         .filter((p) => hasUsableProviderCredential(p, effectiveApiKeys))
         .sort((a, b) => providerPriority(a.id) - providerPriority(b.id) || a.id.localeCompare(b.id))
@@ -2347,7 +2354,13 @@ const layer = Layer.effect(
       return Object.values(s.providers)
         .filter((p) => p.id !== excludeProviderID)
         .filter((p) => !isDeprecatedFreeProvider(p.id))
-        .filter((p) => configured.length === 0 || configured.includes(p.id) || p.id === "opencode")
+        .filter(
+          (p) =>
+            configured.length === 0 ||
+            configured.includes(p.id) ||
+            p.id === "opencode" ||
+            p.id === "omniroute",
+        )
         .filter((p) => hasUsableProviderCredential(p, effectiveApiKeys))
         .sort((a, b) => providerPriority(a.id) - providerPriority(b.id) || a.id.localeCompare(b.id))
         .flatMap((p) => {
