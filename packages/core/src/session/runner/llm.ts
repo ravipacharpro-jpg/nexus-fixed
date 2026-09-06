@@ -8,11 +8,12 @@ import {
   isContextOverflowFailure,
   type ProviderErrorEvent,
 } from "@nexus-ai/llm"
-import { Cause, DateTime, Effect, FiberSet, Layer, Option, Semaphore, Stream } from "effect"
+import { Cause, DateTime, Effect, FiberSet, FileSystem, Layer, Option, Semaphore, Stream } from "effect"
 import { AgentV2 } from "../../agent"
 import { Config } from "../../config"
 import { Database } from "../../database/database"
 import { EventV2 } from "../../event"
+import { FSUtil } from "../../fs-util"
 import { Location } from "../../location"
 import { ModelV2 } from "../../model"
 import { PermissionV2 } from "../../permission"
@@ -31,7 +32,9 @@ import { SessionHistory } from "../history"
 import { SessionInput } from "../input"
 import { SessionSchema } from "../schema"
 import { SessionStore } from "../store"
-import { type RunError, Service } from "./index"
+import { SessionVerification } from "../verification"
+import { RunCompletionUnverified, type RunError, Service } from "./index"
+import { collectFailedToolCalls, formatToolError } from "./completion"
 import { SessionRunnerModel } from "./model"
 import { Config as CoreConfig } from "../../config"
 import { getDeviceConfig } from "../../device"
@@ -107,6 +110,7 @@ const layer = Layer.effect(
     const referenceGuidance = yield* ReferenceGuidance.Service
     const config = yield* Config.Service
     const snapshots = yield* Snapshot.Service
+    const fs = yield* FSUtil.Service
     const configEntries = yield* config.entries()
     const deviceConfig = getDeviceConfig({
       maxConcurrentTools: CoreConfig.latest(configEntries, "max_concurrent_tools"),
@@ -406,6 +410,10 @@ const layer = Layer.effect(
       const hasQueue = hasSteer ? false : yield* SessionInput.hasPending(db, input.sessionID, "queue")
       if (!input.force && !hasSteer && !hasQueue) return
       yield* failInterruptedTools(input.sessionID)
+      const baselineFailed = new Set(
+        collectFailedToolCalls(yield* getContext(input.sessionID)).map((tool) => tool.id),
+      )
+      let turns = 0
       let promotion: SessionInput.Delivery | undefined = hasSteer ? "steer" : hasQueue ? "queue" : undefined
       let shouldRun = input.force || hasSteer || hasQueue
       while (shouldRun) {
@@ -413,6 +421,7 @@ const layer = Layer.effect(
         let step = 1
         while (needsContinuation) {
           const result = yield* runTurn(input.sessionID, promotion, step)
+          turns += 1
           needsContinuation = result.needsContinuation
           step = result.step + 1
           promotion = "steer"
@@ -420,6 +429,29 @@ const layer = Layer.effect(
         }
         shouldRun = yield* SessionInput.hasPending(db, input.sessionID, "queue")
         promotion = shouldRun ? "queue" : undefined
+      }
+      // Mandatory completion gate: a clean drain must not claim success
+      // while tool errors it produced remain unresolved. Pre-existing
+      // failures stay out via the baseline. Interrupts and defects escape
+      // through runTurn above and never reach this gate.
+      const failed = collectFailedToolCalls(yield* getContext(input.sessionID)).filter(
+        (tool) => !baselineFailed.has(tool.id),
+      )
+      const errors = failed.map(formatToolError)
+      // FSUtil is a FileSystem: the gate takes no expected files here, but
+      // the requirement rides the type so file-backed callers cannot drop it.
+      const verification = yield* SessionVerification.verifyCompletion(
+        new SessionVerification.Request({
+          unresolvedErrors: errors,
+          evidence: `drain completed: ${turns} turn(s)`,
+        }),
+      ).pipe(Effect.provideService(FileSystem.FileSystem, fs))
+      if (!verification.success) {
+        return yield* new RunCompletionUnverified({
+          sessionID: input.sessionID,
+          reason: verification.reason ?? "unverified",
+          errors,
+        })
       }
     })
 
@@ -434,6 +466,7 @@ export const node = makeLocationNode({
   layer,
   deps: [
     EventV2.node,
+    FSUtil.node,
     llmClient,
     AgentV2.node,
     ToolRegistry.node,
