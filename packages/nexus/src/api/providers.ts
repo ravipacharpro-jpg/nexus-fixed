@@ -127,7 +127,7 @@ export const PROVIDER_CONTRACTS: Record<string, ProviderContract> = {
     auth: "bearer",
     baseURL: "https://opencode.ai/zen/v1",
     npm: "@ai-sdk/openai-compatible",
-    env: [],
+    env: ["OPENCODE_API_KEY"],
   },
   omniroute: {
     id: "omniroute",
@@ -138,7 +138,7 @@ export const PROVIDER_CONTRACTS: Record<string, ProviderContract> = {
     auth: "bearer",
     baseURL: "http://127.0.0.1:20128/v1",
     npm: "@ai-sdk/openai-compatible",
-    env: [],
+    env: ["OMNIROUTE_API_KEY"],
     curatedModels: [
       {
         id: "auto",

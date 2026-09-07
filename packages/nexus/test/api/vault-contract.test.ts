@@ -10,7 +10,12 @@ describe("API vault provider validation contracts", () => {
   test("registers OmniRoute as an optional local OpenAI-compatible gateway", () => {
     expect(PROVIDER_CONTRACTS.omniroute.baseURL).toBe("http://127.0.0.1:20128/v1")
     expect(PROVIDER_CONTRACTS.omniroute.modelsEndpointPublic).toBe(true)
+    expect(PROVIDER_CONTRACTS.omniroute.env).toEqual(["OMNIROUTE_API_KEY"])
     expect(PROVIDER_CONTRACTS.omniroute.curatedModels?.map((model) => model.id)).toEqual(["auto"])
+  })
+
+  test("registers OpenCode's environment credential for runtime requests", () => {
+    expect(PROVIDER_CONTRACTS.opencode.env).toEqual(["OPENCODE_API_KEY"])
   })
 
   test("registers FreeLLMAPI as a keyed local OpenAI-compatible router", () => {

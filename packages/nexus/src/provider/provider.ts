@@ -367,9 +367,16 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
       }
     }
 
+    const endpointVariable =
+      input.id === "opencode" ? "OPENCODE_BASE_URL" : input.id === "omniroute" ? "OMNIROUTE_BASE_URL" : undefined
+    const endpoint = endpointVariable ? env[endpointVariable]?.trim() : undefined
+
     return {
       autoload: Object.keys(input.models).length > 0,
-      options: ok ? {} : { apiKey: "public" },
+      options: {
+        ...(ok ? {} : { apiKey: "public" }),
+        ...(endpoint ? { baseURL: endpoint.replace(/\/$/, "") } : {}),
+      },
     }
   })
 
